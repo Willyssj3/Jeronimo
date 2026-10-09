@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "traductor-de-libros"
+version = "0.1.0"
+description = "Traductor de libros EPUB con IA que imita el estilo de las traducciones oficiales del autor."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Willyssj3 y colaboradores" }]
+dependencies = [
+    "lxml>=5.0",
+    "anthropic>=1.13",
+    "openai>=1.40",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+traductor = "traductor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

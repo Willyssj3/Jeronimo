@@ -1,0 +1,21 @@
+# Entornos y cachés de Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Libros y proyectos de traducción: NUNCA se suben al repositorio.
+# Los libros tienen derechos de autor y este repositorio es público.
+*.epub
+*.mobi
+*.azw3
+*.pdf
+proyectos/
+mis-proyectos/
+
+# Claves y configuración local
+.env
+*.key
