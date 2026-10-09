@@ -65,6 +65,19 @@ class EpubError(Exception):
     """Error al leer o escribir un EPUB (mensaje pensado para el usuario)."""
 
 
+# Códigos ISO 639-2 frecuentes en metadatos de EPUB.
+_LANG3 = {
+    "eng": "en", "spa": "es", "fre": "fr", "fra": "fr", "ger": "de", "deu": "de", "ita": "it",
+    "por": "pt", "kor": "ko", "jpn": "ja", "chi": "zh", "zho": "zh", "rus": "ru", "cat": "ca",
+    "glg": "gl", "baq": "eu", "eus": "eu", "dut": "nl", "nld": "nl",
+}
+
+
+def normalize_lang(code: str) -> str:
+    base = (code or "").strip().replace("_", "-").split("-")[0].lower()
+    return _LANG3.get(base, base)
+
+
 @dataclass
 class Document:
     """Un archivo traducible del libro (capítulo, índice…)."""
@@ -353,11 +366,35 @@ class EpubBook:
 
     @property
     def author(self) -> str:
-        return self._dc("creator")
+        return self._dc("creator").strip(" ;,.")
 
     @property
     def language(self) -> str:
-        return self._dc("language")
+        """Código de idioma de dos letras (``eng`` y ``en-US`` pasan a ``en``)."""
+        return normalize_lang(self._dc("language"))
+
+    def toc_labels(self) -> dict[str, str]:
+        """Ruta de documento -> título según el índice (NAV o NCX)."""
+        labels: dict[str, str] = {}
+        for doc in self.documents:
+            if doc.kind == "ncx":
+                root = parse_xml(self.read(doc.path)).getroot()
+                for point in root.iter(f"{{{NS['ncx']}}}navPoint"):
+                    text = point.find(f"{{{NS['ncx']}}}navLabel/{{{NS['ncx']}}}text")
+                    content = point.find(f"{{{NS['ncx']}}}content")
+                    if text is not None and content is not None and content.get("src"):
+                        path = self._resolve_from(doc.path, content.get("src"))
+                        labels.setdefault(path, inline.element_text(text))
+            elif not doc.in_spine:
+                root = parse_xml(self.read(doc.path)).getroot()
+                for a in root.xpath("//*[local-name()='nav']//*[local-name()='a'][@href]"):
+                    path = self._resolve_from(doc.path, a.get("href"))
+                    labels.setdefault(path, inline.element_text(a))
+        return {k: v for k, v in labels.items() if v}
+
+    def _resolve_from(self, base_path: str, href: str) -> str:
+        href = unquote(href.split("#", 1)[0])
+        return posixpath.normpath(posixpath.join(posixpath.dirname(base_path), href))
 
     def read(self, path: str) -> bytes:
         return self._zip.read(path)
@@ -391,16 +428,20 @@ class EpubBook:
             out.append(Segment(n=n, tag=localname(el), source=text))
         return out
 
-    def doc_title(self, doc: Document, segments: list[Segment] | None = None) -> str:
-        """Título legible de un documento: su primer encabezado."""
+    def doc_title(self, doc: Document, segments: list[Segment] | None = None,
+                  toc: dict[str, str] | None = None) -> str:
+        """Título legible de un documento: su entrada del índice o su primer encabezado."""
         if doc.kind == "ncx":
             return "Índice (NCX)"
+        if not doc.in_spine:
+            return "Índice"
+        label = (toc if toc is not None else self.toc_labels()).get(doc.path)
+        if label:
+            return label[:80]
         segments = segments if segments is not None else self.segments(doc)
         for s in segments:
             if s.tag in {"h1", "h2", "h3"}:
                 return s.plain[:80]
-        if not doc.in_spine:
-            return "Índice"
         if segments:
             return segments[0].plain[:60]
         return posixpath.basename(doc.path)

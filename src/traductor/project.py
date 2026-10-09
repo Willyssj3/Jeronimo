@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -73,7 +74,7 @@ def read_json(path: Path, default=None):
 class ChapterInfo:
     index: int
     title: str
-    status: str  # "vacío" | "pendiente" | "en curso" | "traducido" | "aprobado"
+    status: str  # "vacío" | "omitido" | "pendiente" | "en curso" | "traducido" | "aprobado"
     total: int
     done: int
     words: int
@@ -89,6 +90,8 @@ class Project:
         merged = json.loads(json.dumps(DEFAULT_CONFIG))
         merged.update(cfg)
         self.config = merged
+        # La interfaz y las tareas en segundo plano pueden guardar a la vez.
+        self._lock = threading.RLock()
 
     # -- creación -----------------------------------------------------------
 
@@ -107,13 +110,14 @@ class Project:
                 "nombre": name or book.title,
                 "titulo": book.title,
                 "autor": book.author,
-                "idioma_origen": (book.language or "en").split("-")[0].lower(),
+                "idioma_origen": book.language or "en",
                 "idioma_destino": target_lang,
                 "variante": variant,
                 "archivo_original": Path(book_path).name,
                 "creado": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             })
             write_json(root / PROJECT_FILE, cfg)
+            toc = book.toc_labels()
             for doc in book.documents:
                 segs = book.segments(doc)
                 write_json(root / "capitulos" / f"{doc.index:03d}.json", {
@@ -121,8 +125,9 @@ class Project:
                     "ruta": doc.path,
                     "tipo": doc.kind,
                     "en_spine": doc.in_spine,
-                    "titulo": book.doc_title(doc, segs),
+                    "titulo": book.doc_title(doc, segs, toc),
                     "aprobado": False,
+                    "omitir": False,
                     "segmentos": [
                         {"n": s.n, "tag": s.tag, "src": s.source, "tgt": None, "nota": None,
                          "avisos": [], "editado": False}
@@ -136,7 +141,8 @@ class Project:
     # -- configuración -------------------------------------------------------
 
     def save_config(self) -> None:
-        write_json(self.root / PROJECT_FILE, self.config)
+        with self._lock:
+            write_json(self.root / PROJECT_FILE, json.loads(json.dumps(self.config)))
 
     @property
     def book_path(self) -> Path:
@@ -151,10 +157,11 @@ class Project:
         return self.config["idioma_destino"]
 
     def record_usage(self, model: str, usage) -> None:
-        acc = self.config.setdefault("uso", {}).setdefault(model, {})
-        for k, v in usage.to_dict().items():
-            acc[k] = acc.get(k, 0) + v
-        self.save_config()
+        with self._lock:
+            acc = self.config.setdefault("uso", {}).setdefault(model, {})
+            for k, v in usage.to_dict().items():
+                acc[k] = acc.get(k, 0) + v
+            self.save_config()
 
     # -- capítulos ----------------------------------------------------------
 
@@ -178,6 +185,8 @@ class Project:
         done = sum(1 for s in segs if s.get("tgt"))
         if not segs:
             status = "vacío"
+        elif data.get("omitir"):
+            status = "omitido"
         elif data.get("aprobado"):
             status = "aprobado"
         elif done == len(segs):
@@ -198,6 +207,12 @@ class Project:
         if approved and any(not s.get("tgt") for s in data["segmentos"]):
             raise ValueError("No se puede aprobar un capítulo con párrafos sin traducir.")
         data["aprobado"] = approved
+        self.save_chapter(data)
+
+    def set_skipped(self, index: int, skipped: bool = True) -> None:
+        """Marca un documento para no traducirlo (p. ej. páginas de la editorial)."""
+        data = self.load_chapter(index)
+        data["omitir"] = skipped
         self.save_chapter(data)
 
     def set_translation(self, index: int, n: int, text: str) -> None:

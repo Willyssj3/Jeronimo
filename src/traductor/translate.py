@@ -240,7 +240,7 @@ class Translator:
     def next_chapter(self) -> int | None:
         """Primer capítulo (en orden de lectura) con párrafos pendientes."""
         for info in self.project.chapters():
-            if info.total and info.done < info.total:
+            if info.total and info.done < info.total and info.status != "omitido":
                 return info.index
         return None
 

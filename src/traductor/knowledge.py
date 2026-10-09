@@ -22,6 +22,8 @@ from .providers import Provider
 _SENT_SPLIT = re.compile(r"(?<=[.!?…:;\"”’)])\s+")
 _TOKEN_RE = re.compile(r"[A-Za-zÀ-ÿ][\w'’\-]*")
 _DIALOGUE_RE = re.compile(r"[\"“”«—]")
+_POSSESSIVE_RE = re.compile(r"[’']s$")
+_CONTRACTION_RE = re.compile(r"[’'](m|ve|d|ll|re|t|s)$|^I[’']", re.IGNORECASE)
 
 
 def _say(log, msg: str) -> None:
@@ -40,9 +42,11 @@ def candidate_terms(texts: list[str], *, min_count: int = 3, limit: int = 150) -
             tokens = _TOKEN_RE.findall(sent)
             run: list[str] = []
             for k, tok in enumerate(tokens + ["."]):
-                is_cap = k > 0 and k < len(tokens) and tok[:1].isupper() and tok.lower() not in _STOP
+                word = _POSSESSIVE_RE.sub("", tok).strip("'’-")
+                is_cap = (k > 0 and k < len(tokens) and word[:1].isupper()
+                          and word.lower() not in _STOP and not _CONTRACTION_RE.search(word))
                 if is_cap:
-                    run.append(tok.strip("'’-"))
+                    run.append(word)
                     continue
                 if run:
                     if len(run) <= 3:

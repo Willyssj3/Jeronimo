@@ -23,15 +23,33 @@ EPUB (cursivas, notas al pie, imágenes, índice) y permite revisar y aprobar
 > de dominio público o con permiso del autor/editorial). Los EPUB nunca se
 > suben a este repositorio.
 
-## Estado
+## Instalar en Windows
 
-| Parte | Estado |
-|---|---|
-| Motor (lectura/escritura de EPUB, emparejamiento, glosario, traducción, exportación) | ✅ Listo, con pruebas automáticas |
-| Línea de comandos | ✅ Lista |
-| App de escritorio para Windows (interfaz gráfica + instalador) | 🚧 En desarrollo |
+1. Entra en la pestaña **Actions** del repositorio, abre la última ejecución
+   correcta de «Pruebas e instalador de Windows» y descarga el artefacto
+   **TraductorDeLibros-Windows** (o, cuando haya versiones publicadas, la
+   sección **Releases**).
+2. Descomprime y ejecuta `TraductorDeLibros-…-instalador.exe`. No necesita
+   permisos de administrador. También hay una versión portátil en ZIP.
+3. Abre **Traductor de Libros** desde el menú Inicio.
 
-Ver el plan completo en [docs/PLAN.md](docs/PLAN.md).
+La app usa el componente WebView2 de Microsoft Edge, incluido en Windows 10 y
+11. Si faltara, se abre automáticamente en el navegador.
+
+## Cómo se usa
+
+1. **Nuevo proyecto**: elige el EPUB a traducir, el idioma y la variante.
+2. **Referencias**: añade otros libros del autor con su traducción oficial
+   (original + traducción). La app los empareja y muestra la calidad.
+3. **Inteligencia artificial**: elige tu IA y pega tu clave (se guarda en el
+   almacén seguro de Windows). Puedes probar la conexión y ver el coste estimado.
+4. **Estilo y glosario**: genera con IA la guía de estilo, el glosario oficial
+   y el análisis del libro; revisa y corrige lo que quieras.
+5. **Capítulos**: traduce el siguiente capítulo, revísalo lado a lado (puedes
+   editar cada párrafo o pedir que se retraduzca) y apruébalo. Lo aprobado sirve
+   de ejemplo para los capítulos siguientes. Puedes omitir páginas que no
+   quieras traducir (créditos, publicidad…).
+6. **Exportar**: genera el EPUB traducido o una edición bilingüe.
 
 ## IA compatibles
 
@@ -43,43 +61,34 @@ Cada persona usa su propia IA:
 | **Google Gemini** | Tiene nivel gratuito | Clave gratis en Google AI Studio, con límites de uso. |
 | **OpenAI**, **OpenRouter**, **DeepSeek** | Pago por uso | Cualquier servicio compatible con la API de OpenAI. |
 | **Ollama**, **LM Studio** | Gratis | Modelos que funcionan en tu propio PC (calidad menor; requiere buena tarjeta gráfica). |
-| **Modo manual** | — | La app genera el texto a pegar en el chat de tu IA y luego pegas la respuesta. |
+| **Modo manual** | — | La app copia cada bloque con sus instrucciones para pegarlo en el chat de tu IA; luego pegas la respuesta. |
 
-## Uso (línea de comandos, mientras se termina la app)
+## Línea de comandos
 
-Requiere Python 3.11 o superior.
+Para usuarios avanzados (requiere Python 3.11 o superior):
 
 ```bash
-pip install -e .
+pip install -e ".[escritorio]"
+traductor-app                      # abre la app
+traductor-app --navegador          # la abre en el navegador
 
-# 1. Crear el proyecto con el libro a traducir
 traductor nuevo mi-libro "Libro.epub" --destino es
-
-# 2. Añadir libros del mismo autor con su traducción oficial (uno o varios)
 traductor referencia mi-libro "Otro_EN.epub" "Otro_ES.epub"
-
-# 3. Elegir la IA (la clave se toma de ANTHROPIC_API_KEY, GEMINI_API_KEY, etc.)
 traductor proveedor mi-libro --tipo anthropic --modelo claude-opus-5-5
-
-# 4. Preparar guía de estilo, glosario y análisis del libro (revisables en mi-libro/conocimiento/)
 traductor preparar mi-libro
-
-# 5. Traducir capítulo a capítulo, revisar y aprobar
-traductor traducir mi-libro
+traductor traducir mi-libro        # siguiente capítulo
 traductor aprobar mi-libro --capitulo 3
-
-# 6. Generar el EPUB traducido (o bilingüe)
-traductor exportar mi-libro
-traductor exportar mi-libro --bilingue
+traductor exportar mi-libro [--bilingue]
 ```
 
-Otros comandos: `traductor estado`, `traductor modelos`, y el modo manual
-`traductor prompt` / `traductor importar`.
+Otros comandos: `estado`, `modelos`, `omitir`, y el modo manual `prompt` /
+`importar`. Las claves se leen de `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+`OPENAI_API_KEY`, etc., o del almacén seguro del sistema.
 
 ## Desarrollo
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e ".[dev]"
+python -m venv .venv && .venv/bin/pip install -e ".[escritorio,dev]"
 .venv/bin/python -m pytest
 ```
 
@@ -95,7 +104,12 @@ Estructura del código (`src/traductor/`):
 | `translate.py` | Traducción por bloques con contexto, reintentos, reanudación y modo manual. |
 | `providers/` | Adaptadores de Claude, OpenAI-compatibles y Ollama. |
 | `project.py` | Carpeta de proyecto y su estado. |
+| `app/` | App de escritorio: API, servidor local y la interfaz (`ui/`). |
 | `cli.py` | Línea de comandos. |
+
+El instalador se construye en GitHub Actions (`.github/workflows/build.yml`)
+con PyInstaller e Inno Setup (`packaging/`). Al crear una etiqueta `v*` se
+publica automáticamente en *Releases*.
 
 ## Licencia
 

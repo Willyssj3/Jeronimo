@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traductor de Libros</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v16H6.5a1.5 1.5 0 0 0 0 3H20v1H6.5A2.5 2.5 0 0 1 4 19.5v-15Zm3 1.5v2h9V6H7Zm0 4v2h6v-2H7Z"/></svg>
+      <span>Traductor de Libros</span>
+    </div>
+    <div id="project-name" class="project-name"></div>
+    <div class="spacer"></div>
+    <button id="btn-close-project" class="ghost" hidden>Cerrar proyecto</button>
+    <button id="btn-quit" class="ghost" hidden>Salir</button>
+  </header>
+
+  <div class="layout">
+    <nav id="sidebar" hidden>
+      <a href="#resumen" data-view="resumen">Resumen</a>
+      <a href="#referencias" data-view="referencias">Referencias</a>
+      <a href="#ia" data-view="ia">Inteligencia artificial</a>
+      <a href="#conocimiento" data-view="conocimiento">Estilo y glosario</a>
+      <a href="#capitulos" data-view="capitulos">Capítulos</a>
+      <a href="#exportar" data-view="exportar">Exportar</a>
+    </nav>
+    <main id="view" tabindex="-1"><p class="muted">Cargando…</p></main>
+  </div>
+
+  <footer id="taskbar" hidden>
+    <div class="task-text"><strong id="task-name"></strong> <span id="task-message"></span></div>
+    <div class="progress"><div id="task-bar"></div></div>
+    <button id="btn-task-log" class="ghost small">Ver registro</button>
+    <button id="btn-task-cancel" class="small danger">Detener</button>
+  </footer>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <div id="modal-backdrop" hidden>
+    <div id="modal" role="dialog" aria-modal="true">
+      <div id="modal-body"></div>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="ghost">Cancelar</button>
+        <button id="modal-ok">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

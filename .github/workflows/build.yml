@@ -1,0 +1,63 @@
+name: Pruebas e instalador de Windows
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Instalar
+        run: pip install -e ".[dev]"
+      - name: Pruebas
+        run: python -m pytest -q
+
+  windows:
+    needs: pruebas
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[escritorio]" pyinstaller
+      - name: Versión
+        shell: bash
+        run: echo "VERSION=$(python -c 'import traductor; print(traductor.__version__)')" >> "$GITHUB_ENV"
+      - name: Construir la app (PyInstaller)
+        working-directory: packaging
+        run: pyinstaller --noconfirm --distpath ..\dist --workpath ..\build TraductorDeLibros.spec
+      - name: Comprobar el paquete
+        run: |
+          if (!(Test-Path dist\TraductorDeLibros\TraductorDeLibros.exe)) { exit 1 }
+          if (!(Get-ChildItem -Recurse dist\TraductorDeLibros -Filter app.js)) { exit 1 }
+      - name: Crear el instalador (Inno Setup)
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:VERSION" packaging\instalador.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Versión portátil (ZIP)
+        run: Compress-Archive -Path dist\TraductorDeLibros\* -DestinationPath "dist\instalador\TraductorDeLibros-$env:VERSION-portable.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TraductorDeLibros-Windows
+          path: dist/instalador/*
+      - name: Publicar versión
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/instalador/*

@@ -83,7 +83,8 @@ def cmd_traducir(a) -> None:
     if a.capitulo is not None:
         targets = [a.capitulo]
     elif a.todo:
-        targets = [c.index for c in project.chapters() if c.total and c.done < c.total]
+        targets = [c.index for c in project.chapters()
+                   if c.total and c.done < c.total and c.status != "omitido"]
     else:
         nxt = tr.next_chapter()
         targets = [nxt] if nxt is not None else []
@@ -106,6 +107,13 @@ def cmd_aprobar(a) -> None:
     project.set_approved(a.capitulo, not a.deshacer)
     print("Capítulo aprobado: sus párrafos servirán de ejemplo para los siguientes."
           if not a.deshacer else "Aprobación retirada.")
+
+
+def cmd_omitir(a) -> None:
+    project = Project(a.carpeta)
+    for index in a.capitulos:
+        project.set_skipped(index, not a.deshacer)
+    print("Hecho: esos documentos " + ("se traducirán." if a.deshacer else "no se traducirán (quedan en el idioma original)."))
 
 
 def cmd_estado(a) -> None:
@@ -217,6 +225,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--capitulo", type=int, required=True)
     s.add_argument("--deshacer", action="store_true")
     s.set_defaults(func=cmd_aprobar)
+
+    s = sub.add_parser("omitir", help="no traducir ciertos documentos (créditos, publicidad…)")
+    s.add_argument("carpeta")
+    s.add_argument("capitulos", type=int, nargs="+")
+    s.add_argument("--deshacer", action="store_true")
+    s.set_defaults(func=cmd_omitir)
 
     s = sub.add_parser("estado", help="progreso del proyecto")
     s.add_argument("carpeta")

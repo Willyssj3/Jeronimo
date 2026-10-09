@@ -68,21 +68,25 @@ el coste estimado.
 1. ✅ **Motor**: EPUB, marcas de formato, emparejamiento, búsqueda de ejemplos,
    conocimiento, traducción por bloques, proveedores, exportación, línea de
    comandos y pruebas automáticas.
-2. 🚧 **App de escritorio** (pywebview + interfaz HTML en español):
-   - Asistente de nuevo proyecto (libro, idioma, variante).
-   - Pantalla de referencias (añadir pares, ver calidad del emparejamiento).
-   - Configuración de IA (lista de modelos, clave guardada en el
-     Administrador de credenciales de Windows, coste estimado).
-   - Conocimiento: editar guía de estilo y glosario.
-   - Revisión lado a lado por capítulo: original / traducción editable,
-     notas y avisos de la IA, aprobar capítulo.
-   - Exportar EPUB traducido o bilingüe.
-3. **Instalador de Windows** generado automáticamente con GitHub Actions
-   (PyInstaller + Inno Setup) y publicado en *Releases*.
-4. **Mejoras**:
+2. ✅ **App de escritorio** (pywebview + interfaz HTML en español, con modo
+   navegador de respaldo):
+   - Nuevo proyecto / abrir / recientes.
+   - Referencias con calidad del emparejamiento.
+   - Configuración de IA (lista de modelos, clave en el almacén seguro,
+     prueba de conexión, coste estimado).
+   - Estilo y glosario editables; generación con IA.
+   - Capítulos: traducir siguiente / todo, omitir documentos.
+   - Revisión lado a lado con formato visible, edición, retraducción de un
+     párrafo, notas y avisos de la IA, aprobación, modo manual.
+   - Exportación a EPUB traducido o bilingüe.
+3. ✅ **Instalador de Windows** generado con GitHub Actions (PyInstaller +
+   Inno Setup) y publicado en *Releases* al crear una etiqueta `v*`.
+4. **Mejoras pendientes**:
+   - Probar el instalador en equipos reales y añadir icono propio.
    - Emparejamiento con *embeddings* multilingües (opcional, vía Ollama o API)
      para libros con estructura muy distinta.
    - Pasada de revisión por una segunda IA (consistencia y glosario).
-   - Traducción del texto alternativo de imágenes y del título.
+   - Preparación del conocimiento en modo manual (copiar/pegar).
+   - Traducción del texto alternativo de imágenes.
    - Más formatos de entrada (DOCX, TXT) y salida (DOCX, PDF).
    - Interfaz en inglés.
