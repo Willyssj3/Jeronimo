@@ -392,6 +392,9 @@ function renderHome(v) {
     h("option", { value: "es-MX" }, "Español de México"),
     h("option", { value: "pt-BR" }, "Portugués de Brasil"),
     h("option", { value: "pt-PT" }, "Portugués de Portugal"));
+  const profileSel = (info.perfiles || []).length ? h("select", { id: "new-profile" },
+    h("option", { value: "" }, "Ninguno (empezar de cero)"),
+    info.perfiles.map((p) => h("option", { value: p.id }, `${p.nombre} · ${plural(p.libros.length, "libro", "libros")}, ${plural(p.referencias, "referencia", "referencias")}`))) : null;
 
   put(v,
     h("section", { class: "hero" },
@@ -413,12 +416,17 @@ function renderHome(v) {
           h("div", { class: "field", style: "flex:1" }, h("label", {}, "Variante"), variant)),
         h("div", { class: "field" }, h("label", {}, "Carpeta del proyecto ", h("span", { class: "hint" }, "(opcional)")),
           pathField("new-folder", info.carpeta_por_defecto + "\\…", "carpeta")),
+        profileSel ? h("div", { class: "field" },
+          h("label", {}, "Perfil de autor ", h("span", { class: "hint" }, "(referencias, guía y glosario de sus otros libros)"),
+            h("button", { class: "link inline small", type: "button", style: "margin-left:8px", onclick: manageProfiles }, "Gestionar")),
+          profileSel) : null,
         h("div", { class: "row end" }, h("button", {
           class: "gold",
           onclick: async () => {
             const epub = $("#new-epub").value.trim();
             if (!epub) return toast("Elige el EPUB que quieres traducir.", true);
-            const s = await guard(() => rpc("create_project", epub, $("#new-folder").value.trim(), $("#new-lang").value, $("#new-variant").value));
+            const s = await guard(() => rpc("create_project", epub, $("#new-folder").value.trim(), $("#new-lang").value, $("#new-variant").value,
+              $("#new-profile") ? $("#new-profile").value : ""));
             if (s) await opened(s);
           },
         }, "Crear proyecto"))),
@@ -445,6 +453,25 @@ function renderHome(v) {
     pdfCard(),
     h("div", { class: "home-foot" }, h("div", { class: "ornament" }, h("span")),
       h("p", { class: "muted small" }, `Jerónimo ${info.version} · modo ${info.modo} · Usa solo libros que tengas derecho a traducir.`)));
+}
+
+async function manageProfiles() {
+  const list = h("div", {});
+  const draw = (items) => {
+    list.textContent = "";
+    if (!items.length) { list.append(h("p", { class: "muted" }, "No quedan perfiles.")); return; }
+    items.forEach((p) => list.append(h("div", { class: "qa-row", style: "grid-template-columns:1fr auto" },
+      h("div", {}, h("strong", {}, p.nombre),
+        h("div", { class: "muted small" }, `${p.libros.join(", ")} · ${plural(p.referencias, "referencia", "referencias")} · ${plural(p.glosario, "término", "términos")}`)),
+      h("button", { class: "small ghost danger-text", onclick: async () => {
+        const rest = await guard(() => rpc("delete_author_profile", p.id));
+        if (rest) { state.info.perfiles = rest; draw(rest); }
+      } }, "Borrar"))));
+  };
+  draw(state.info.perfiles || []);
+  await modal(h("div", {}, h("div", { class: "eyebrow" }, "Perfiles de autor"), h("h3", {}, "Gestionar perfiles"),
+    h("p", { class: "small muted" }, "Borrar un perfil no toca los proyectos que lo usaron."), list), { ok: "Cerrar", cancel: null });
+  render();
 }
 
 function pdfCard() {
@@ -549,6 +576,7 @@ function renderReferences(v) {
           if (sum) { state.summary = sum; render(); }
         } }, "Quitar"))))
       : h("div", { class: "card empty-state" }, "Aún no hay libros de referencia."),
+    profileCard(),
     h("div", { class: "card stack" },
       cardHead("pluma", "Añadir libro de referencia"),
       h("div", { class: "field" }, h("label", {}, "Original ", h("span", { class: "hint" }, "(mismo idioma que el libro a traducir)")), pathField("ref-src", "C:\\Libros\\otro-libro-EN.epub")),
@@ -560,6 +588,39 @@ function renderReferences(v) {
         if (!a || !b) return toast("Elige los dos EPUB: el original y su traducción oficial.", true);
         startTask(() => rpc("add_reference", a, b, $("#ref-name").value.trim()));
       } }, "Emparejar"))));
+}
+
+function profileCard() {
+  const s = state.summary;
+  const profilesList = state.info.perfiles || [];
+  const name = h("input", { type: "text", value: s.perfil_autor || s.autor || "", placeholder: "Nombre del autor" });
+  const select = profilesList.length ? h("select", { style: "width:auto;min-width:240px" },
+    profilesList.map((p) => h("option", { value: p.id, selected: p.nombre === s.perfil_autor }, p.nombre))) : null;
+  const replace = h("input", { type: "checkbox" });
+  return h("div", { class: "card stack" },
+    cardHead("libro", "Perfil de autor"),
+    h("p", { class: "muted", style: "margin-bottom:0" }, "Guarda lo aprendido de este autor (referencias emparejadas, guía de estilo, glosario y los capítulos que ya aprobaste) para empezar su próximo libro con todo listo."
+      + (s.perfil_autor ? ` Este proyecto usa el perfil «${s.perfil_autor}».` : "")),
+    h("div", { class: "row" },
+      h("div", { style: "flex:1;min-width:220px" }, name),
+      h("button", { onclick: async () => {
+        const r = await guard(() => rpc("save_author_profile", name.value.trim()));
+        if (!r) return;
+        state.info = await rpc("app_info");
+        toast(`Perfil «${r.nombre}» guardado: ${plural(r.referencias, "referencia", "referencias")}, ${plural(r.glosario, "término", "términos")}.`);
+        render();
+      } }, "Guardar perfil")),
+    select ? h("div", { class: "row" },
+      h("span", { class: "muted small" }, "Usar en este proyecto:"), select,
+      h("label", { class: "row", style: "margin:0;gap:6px;font-weight:500" }, replace, "reemplazar la guía de estilo"),
+      h("button", { class: "ghost", onclick: async () => {
+        const r = await guard(() => rpc("apply_author_profile", select.value, replace.checked));
+        if (!r) return;
+        state.summary = r.resumen;
+        toast(`Perfil aplicado: ${plural(r.referencias, "referencia nueva", "referencias nuevas")}, ${plural(r.terminos, "término nuevo", "términos nuevos")}`
+          + (r.estilo ? " y la guía de estilo." : "."));
+        render();
+      } }, "Aplicar")) : null);
 }
 
 /* ---------------------------------------------------------------- IA */

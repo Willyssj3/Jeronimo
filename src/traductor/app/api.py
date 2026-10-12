@@ -17,7 +17,7 @@ from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
 
-from .. import __version__, inline, knowledge, qa, review, updates
+from .. import __version__, inline, knowledge, profiles, qa, review, updates
 from .. import search as finder
 from ..epub import EpubBook, EpubError
 from ..pdf2epub import PdfError
@@ -145,6 +145,7 @@ class Api:
             "modelos_claude": SUGGESTED_MODELS,
             "chats": [{"id": k, "nombre": v[0], "bloque": v[1]} for k, v in CHAT_PRESETS.items()],
             "carpeta_por_defecto": str(default_projects_dir()),
+            "perfiles": profiles.list_profiles(),
             "recientes": [dict(r, existe=(Path(r["carpeta"]) / "proyecto.json").exists())
                           for r in self._settings().get("recientes", [])],
             "proyecto_abierto": str(self._project.root) if self._project else None,
@@ -254,7 +255,7 @@ class Api:
         return self._project
 
     def create_project(self, epub_path: str, folder: str = "", target_lang: str = "es",
-                       variant: str = "auto") -> dict:
+                       variant: str = "auto", profile: str = "") -> dict:
         epub = Path(epub_path.strip().strip('"'))
         if not epub.is_file():
             raise FileNotFoundError(f"No encuentro el archivo «{epub}».")
@@ -267,6 +268,8 @@ class Api:
         if default_provider:
             project.config["proveedor"] = dict(default_provider)
             project.save_config()
+        if profile:
+            profiles.apply_profile(project, profile)
         self._open(project)
         return self.project_summary()
 
@@ -331,6 +334,7 @@ class Api:
             "bloque_manual": (cfg.get("opciones") or {}).get("bloque_manual") or DEFAULT_MANUAL_BLOCK,
             "chat_manual": (cfg.get("opciones") or {}).get("chat_manual") or "claude",
             "bloques_livianos": bool((cfg.get("opciones") or {}).get("bloques_livianos")),
+            "perfil_autor": cfg.get("perfil_autor", ""),
             "paquete": self._package_state(p),
             "proveedor": prov,
             "tiene_clave": kind in LOCAL_KINDS or bool(get_api_key(kind)),
@@ -368,6 +372,20 @@ class Api:
 
         self._tasks.start("Emparejar referencia", run)
         return self.task_status()
+
+    # -- perfiles de autor ---------------------------------------------------------
+
+    def save_author_profile(self, name: str = "") -> dict:
+        """Guarda referencias, guía, glosario y lo aprobado como perfil del autor."""
+        return profiles.save_profile(self._need_project(), name)
+
+    def apply_author_profile(self, profile_id: str, replace_style: bool = False) -> dict:
+        result = profiles.apply_profile(self._need_project(), profile_id, replace_style=replace_style)
+        return dict(result, resumen=self.project_summary())
+
+    def delete_author_profile(self, profile_id: str) -> list[dict]:
+        profiles.delete_profile(profile_id)
+        return profiles.list_profiles()
 
     def remove_reference(self, folder_name: str) -> dict:
         self._need_project().remove_reference(folder_name)
