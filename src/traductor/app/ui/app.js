@@ -543,7 +543,9 @@ function renderSummary(v) {
     { done: s.referencias.length > 0, title: "Libros de referencia", text: s.referencias.length
       ? `${plural(s.referencias.length, "añadido", "añadidos")}: ${s.referencias.map((r) => r.nombre).join(", ")}`
       : "Añade libros del autor con su traducción oficial (recomendado).", go: "referencias" },
-    { done: s.tiene_clave && !!s.proveedor.tipo, title: "Inteligencia artificial", text: `${provName}${s.proveedor.modelo ? " · " + s.proveedor.modelo : ""}${s.tiene_clave ? "" : " · falta la clave"}`, go: "ia" },
+    { done: s.tiene_clave && !!s.proveedor.tipo, title: "Inteligencia artificial", text: s.proveedor.tipo === "manual"
+      ? (() => { const m = manualChoice(s); return `Modo manual · ${m.chat.nombre || ""} · ${m.model.nombre || ""} · ${s.plan_manual === "gratis" ? "plan gratuito" : "plan de pago"}`; })()
+      : `${provName}${s.proveedor.modelo ? " · " + s.proveedor.modelo : ""}${s.tiene_clave ? "" : " · falta la clave"}`, go: "ia" },
     { done: s.estilo && s.glosario > 0, title: "Estilo y glosario", text: `Guía de estilo: ${s.estilo ? "sí" : "no"} · glosario: ${s.glosario} términos · sinopsis: ${s.sinopsis ? "sí" : "no"}`, go: "conocimiento" },
     { done: prog.total > 0 && prog.hechos === prog.total, title: "Traducir y revisar", text: `${fmt(prog.hechos)} de ${fmt(prog.total)} párrafos · ${prog.caps_aprobados} de ${prog.caps_total} documentos aprobados`, go: "capitulos" },
     { done: false, title: "Exportar el EPUB", text: "Genera el libro traducido o una edición bilingüe.", go: "exportar" },
@@ -672,6 +674,7 @@ function renderAI(v) {
       current === "anthropic" ? state.info.modelos_claude.map(([id, label]) => h("option", { value: id }, label)) : []);
     put(fields,
       h("div", { class: "help" }, PROVIDER_HELP[current] || ""),
+      current === "manual" && state.summary.proveedor.tipo === "manual" ? manualChatBox(draw) : null,
       current === "manual" && state.summary.proveedor.tipo === "manual" ? packageBox(draw) : null,
       current === "manual" ? null : h("div", { class: "field" }, h("label", {}, "Modelo"),
         h("div", { class: "path" },
@@ -712,6 +715,71 @@ function renderAI(v) {
     h("div", { class: "card" }, fields),
     h("div", { class: "card" }, h("strong", {}, "Coste estimado de lo pendiente: "), costText(s.estimacion),
       h("span", { class: "muted small" }, ` (${fmt(s.estimacion.palabras)} palabras)`)));
+}
+
+/* Modo manual: chat, modelo y plan; el tamaño de bloque recomendado sale de ahí. */
+const BLOCK_SIZES = [4000, 6000, 8000, 10000, 12000, 15000, 25000];
+
+function manualChoice(s) {
+  const chat = (state.info.chats || []).find((c) => c.id === (s.chat_manual || "claude")) || { modelos: [] };
+  const model = chat.modelos.find((m) => m.id === s.modelo_manual) || chat.modelos[0] || {};
+  const plan = (state.info.planes || []).find((p) => p.id === s.plan_manual) || {};
+  return { chat, model, plan };
+}
+
+function manualTips(s) {
+  const { model } = manualChoice(s);
+  const tips = [];
+  if (s.plan_manual === "gratis") {
+    tips.push("Con un plan gratuito hay menos mensajes por día y respuestas más cortas: por eso se recomiendan bloques más pequeños. Si llegas al límite, sigue más tarde: la app recuerda por dónde ibas.");
+  }
+  if (model.nivel === "rapido") {
+    tips.push("Los modelos rápidos traducen peor la literatura: sirven para borradores o para la preparación; para la traducción final conviene el más capaz.");
+  } else if (model.nivel === "avanzado" && s.plan_manual !== "gratis") {
+    tips.push("Buena combinación para traducir libros: bloques grandes y menos copiar y pegar.");
+  }
+  if (s.bloque_manual > s.bloque_recomendado) {
+    tips.push(`El bloque elegido es más grande que el recomendado (${fmt(s.bloque_recomendado)} caracteres): si las respuestas se cortan, bájalo.`);
+  }
+  return tips;
+}
+
+/* Selectores de chat, modelo, plan y bloque; ``onChange`` recibe el resumen nuevo. */
+function manualSelectors(onChange) {
+  const s = state.summary;
+  const save = async (values) => {
+    const sum = await guard(() => rpc("set_settings", values));
+    if (sum) { state.summary = sum; onChange(sum); }
+  };
+  const { chat } = manualChoice(s);
+  const chatSel = h("select", { style: "width:auto", onchange: (e) => save({ chat_manual: e.target.value }) },
+    (state.info.chats || []).map((c) => h("option", { value: c.id, selected: (s.chat_manual || "claude") === c.id }, c.nombre)));
+  const modelSel = h("select", { style: "width:auto", onchange: (e) => save({ modelo_manual: e.target.value }) },
+    chat.modelos.map((m) => h("option", { value: m.id, selected: s.modelo_manual === m.id }, m.nombre)));
+  const planSel = h("select", { style: "width:auto", onchange: (e) => save({ plan_manual: e.target.value }) },
+    (state.info.planes || []).map((p) => h("option", { value: p.id, selected: (s.plan_manual || "pago") === p.id }, p.nombre)));
+  const sizeSel = h("select", { style: "width:auto", onchange: (e) => save({ bloque_manual: Number(e.target.value) }) },
+    BLOCK_SIZES.map((v) => h("option", { value: v, selected: (s.bloque_manual || 15000) === v },
+      `${fmt(v)} caracteres${v === s.bloque_recomendado ? " (recomendado)" : ""}`)));
+  const pair = (label, el) => h("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, h("label", { style: "margin:0" }, label), el);
+  return [pair("Chat", chatSel), pair("Modelo", modelSel), pair("Plan", planSel), pair("Bloque", sizeSel)];
+}
+
+function manualChatBox(redraw) {
+  const s = state.summary;
+  const estimate = h("p", { class: "small", style: "margin-bottom:0" }, "Calculando cuántos bloques faltan…");
+  rpc("manual_book_estimate").then((e) => {
+    estimate.textContent = e.parrafos
+      ? `Para terminar el libro faltan unos ${plural(e.bloques, "bloque", "bloques")} (mensajes al chat) con bloques de ${fmt(e.bloque)} caracteres.`
+      : "Todo el libro está traducido.";
+  }).catch(() => { estimate.textContent = ""; });
+  return h("div", { class: "card sunk stack", style: "margin-bottom:0" },
+    h("div", { class: "eyebrow", style: "margin:0" }, "Modo manual"),
+    h("h3", { style: "margin:2px 0 0" }, "Tu chat de IA"),
+    h("p", { class: "small", style: "margin-bottom:0" }, "Elige el chat, el modelo que usas en él y tu plan: la app ajusta el tamaño de bloque recomendado. Puedes cambiarlo cuando quieras, también desde cada capítulo."),
+    h("div", { class: "row" }, manualSelectors(() => redraw())),
+    manualTips(s).map((tip) => h("div", { class: "note small" }, tip)),
+    estimate);
 }
 
 /* Paquete para Proyectos: instrucciones y conocimiento que se suben una vez a un
@@ -1531,15 +1599,14 @@ function manualPanel(index) {
   const out = h("textarea", { placeholder: "Pega aquí la respuesta completa de la IA (con las marcas <seg id=\"…\">)." });
   const info = h("p", { class: "muted small", style: "margin:0" });
   const counter = h("strong", {}, "…");
-  const chatSel = h("select", { style: "width:auto", onchange: async (e) => {
-    const sum = await guard(() => rpc("set_settings", { chat_manual: e.target.value }));
-    if (sum) { state.summary = sum; sizeSel.value = String(sum.bloque_manual); refreshCounter(); }
-  } }, (state.info.chats || []).map((c) => h("option", { value: c.id, selected: (state.summary.chat_manual || "claude") === c.id }, c.nombre)));
-  const sizeSel = h("select", { style: "width:auto", onchange: async (e) => {
-    const sum = await guard(() => rpc("set_settings", { bloque_manual: Number(e.target.value) }));
-    if (sum) { state.summary = sum; refreshCounter(); }
-  } }, [[6000, "6.000 caracteres"], [10000, "10.000 caracteres"], [12000, "12.000 caracteres"], [15000, "15.000 caracteres"], [25000, "25.000 caracteres"]].map(([v, label]) =>
-    h("option", { value: v, selected: (state.summary.bloque_manual || 15000) === v }, label)));
+  const selectors = h("div", { class: "row" });
+  const tips = h("div", { class: "stack" });
+  const drawSelectors = () => {
+    selectors.textContent = "";
+    put(selectors, manualSelectors(() => { drawSelectors(); refreshCounter(); }));
+    tips.textContent = "";
+    put(tips, manualTips(state.summary).map((tip) => h("div", { class: "note small" }, tip)));
+  };
 
   const refreshCounter = async () => {
     const st = await guard(() => rpc("manual_status", index));
@@ -1589,9 +1656,9 @@ function manualPanel(index) {
     state.summary.bloques_livianos ? h("div", { class: (state.summary.paquete && state.summary.paquete.desactualizado) ? "warn small" : "note small" },
       "Bloques livianos: pega cada bloque en un chat abierto dentro del proyecto donde subiste el paquete."
       + (state.summary.paquete && state.summary.paquete.desactualizado ? " El paquete está desactualizado: vuelve a generarlo en «Inteligencia artificial»." : "")) : null,
-    h("div", { class: "row" }, counter, h("div", { class: "spacer" }),
-      h("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, h("label", { style: "margin:0" }, "Chat"), chatSel),
-      h("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, h("label", { style: "margin:0" }, "Bloque"), sizeSel)),
+    h("div", { class: "row" }, counter),
+    selectors,
+    tips,
     h("ol", { class: "small", style: "margin:0;padding-left:1.2em;line-height:1.6" },
       h("li", {}, "Pulsa «Copiar bloque» y pégalo en tu chat de IA. Cada bloque lleva todo el contexto: guía de estilo, glosario, ejemplos oficiales, resumen del capítulo y los párrafos anteriores; puedes usar el mismo chat o uno nuevo."),
       h("li", {}, "Cuando termine, copia la respuesta con el botón de copiar del bloque de código (o selecciona todo su texto)."),
@@ -1601,6 +1668,7 @@ function manualPanel(index) {
     h("div", { class: "row end" },
       h("button", { class: "ghost", onclick: () => doImport(false) }, "Solo importar"),
       h("button", { class: "gold", onclick: () => doImport(true) }, "Importar y copiar el siguiente")));
+  drawSelectors();
   refreshCounter();
   return panel;
 }

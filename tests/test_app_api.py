@@ -142,3 +142,28 @@ def test_review_pass_through_the_api(api):
     assert r["resueltas"] == 1 and r["sugerencias"] == 0
     assert "PUERTOARADO" in api.chapter(0)["segmentos"][1]["tgt"]
     assert api.review_reset(0)["por_revisar"] == 4
+
+
+def test_manual_chat_model_and_plan(api):
+    info = api.app_info()
+    claude = next(c for c in info["chats"] if c["id"] == "claude")
+    assert [m["id"] for m in claude["modelos"]] == ["opus", "sonnet", "haiku"]
+    assert [p["id"] for p in info["planes"]] == ["pago", "gratis"]
+
+    s = api.set_settings({"chat_manual": "claude"})
+    assert (s["modelo_manual"], s["plan_manual"], s["bloque_manual"], s["bloque_recomendado"]) == ("opus", "pago", 15000, 15000)
+    s = api.set_settings({"plan_manual": "gratis"})
+    assert s["bloque_manual"] == s["bloque_recomendado"] == 6000
+    s = api.set_settings({"modelo_manual": "haiku"})
+    assert s["bloque_manual"] == 4000
+    s = api.set_settings({"bloque_manual": 12000})  # elegido a mano: se respeta
+    assert (s["bloque_manual"], s["bloque_recomendado"]) == (12000, 4000)
+    s = api.set_settings({"chat_manual": "gemini"})  # otro chat: su modelo más capaz
+    assert (s["modelo_manual"], s["bloque_manual"]) == ("pro", 6000)
+    with pytest.raises(ValueError):
+        api.set_settings({"modelo_manual": "opus"})  # no es un modelo de Gemini
+    with pytest.raises(ValueError):
+        api.set_settings({"plan_manual": "vip"})
+
+    est = api.manual_book_estimate()
+    assert est["bloques"] >= 2 and est["parrafos"] > 0 and est["bloque"] == 6000

@@ -28,7 +28,8 @@ from ..providers import KINDS, ProviderError, config_dir, get_api_key, make_prov
 from ..providers.anthropic_provider import PRICES, SUGGESTED_MODELS, estimate_cost
 from ..providers.base import Usage
 from ..review import Reviewer
-from ..translate import CHAT_PRESETS, DEFAULT_MANUAL_BLOCK, Options, Translator, pseudo_slots
+from ..translate import (CHAT_PRESETS, DEFAULT_MANUAL_BLOCK, PLANS, Options, Translator, chat_models, model_tier,
+                         pseudo_slots, recommended_block)
 
 LOCAL_KINDS = {"ollama", "lmstudio", "manual"}
 
@@ -143,7 +144,10 @@ class Api:
             "idiomas": {k: v[1] for k, v in LANG_NAMES.items()},
             "variantes": list(VARIANTS),
             "modelos_claude": SUGGESTED_MODELS,
-            "chats": [{"id": k, "nombre": v[0], "bloque": v[1]} for k, v in CHAT_PRESETS.items()],
+            "chats": [{"id": k, "nombre": v[0], "bloque": v[1],
+                       "modelos": [{"id": m, "nombre": n, "nivel": tier} for m, n, tier in chat_models(k)]}
+                      for k, v in CHAT_PRESETS.items()],
+            "planes": [{"id": k, "nombre": v} for k, v in PLANS.items()],
             "carpeta_por_defecto": str(default_projects_dir()),
             "perfiles": profiles.list_profiles(),
             "recientes": [dict(r, existe=(Path(r["carpeta"]) / "proyecto.json").exists())
@@ -325,14 +329,26 @@ class Api:
         for key in ("nombre", "variante", "titulo_traducido", "revision", "idioma_destino"):
             if key in values:
                 p.config[key] = values[key]
+        opts = p.config.setdefault("opciones", {})
         if "chat_manual" in values:
             chat = values["chat_manual"]
             if chat not in CHAT_PRESETS:
                 raise ValueError("Chat desconocido.")
-            opts = p.config.setdefault("opciones", {})
+            if chat != opts.get("chat_manual"):
+                opts["modelo_manual"] = chat_models(chat)[0][0]  # el más capaz de ese chat
             opts["chat_manual"] = chat
-            if "bloque_manual" not in values:
-                opts["bloque_manual"] = CHAT_PRESETS[chat][1]
+        if "modelo_manual" in values:
+            chat = opts.get("chat_manual") or "claude"
+            if values["modelo_manual"] not in {m for m, _n, _t in chat_models(chat)}:
+                raise ValueError("Modelo desconocido para ese chat.")
+            opts["modelo_manual"] = values["modelo_manual"]
+        if "plan_manual" in values:
+            if values["plan_manual"] not in PLANS:
+                raise ValueError("Plan desconocido.")
+            opts["plan_manual"] = values["plan_manual"]
+        if any(k in values for k in ("chat_manual", "modelo_manual", "plan_manual")) and "bloque_manual" not in values:
+            opts["bloque_manual"] = recommended_block(opts.get("chat_manual") or "claude", opts.get("modelo_manual", ""),
+                                                      opts.get("plan_manual", "pago"))
         if "bloques_livianos" in values:
             p.config.setdefault("opciones", {})["bloques_livianos"] = bool(values["bloques_livianos"])
         if "bloque_manual" in values:
@@ -365,6 +381,11 @@ class Api:
             "revision": cfg.get("revision", "capitulo"),
             "bloque_manual": (cfg.get("opciones") or {}).get("bloque_manual") or DEFAULT_MANUAL_BLOCK,
             "chat_manual": (cfg.get("opciones") or {}).get("chat_manual") or "claude",
+            "modelo_manual": self._manual_model(cfg),
+            "plan_manual": (cfg.get("opciones") or {}).get("plan_manual") or "pago",
+            "bloque_recomendado": recommended_block((cfg.get("opciones") or {}).get("chat_manual") or "claude",
+                                                    self._manual_model(cfg),
+                                                    (cfg.get("opciones") or {}).get("plan_manual") or "pago"),
             "bloques_livianos": bool((cfg.get("opciones") or {}).get("bloques_livianos")),
             "perfil_autor": cfg.get("perfil_autor", ""),
             "paquete": self._package_state(p),
@@ -700,6 +721,26 @@ class Api:
     def package_instructions(self) -> str:
         """Solo el texto de las instrucciones del Proyecto (para copiarlo)."""
         return Translator(self._need_project(), None).project_instructions()
+
+    @staticmethod
+    def _manual_model(cfg: dict) -> str:
+        opts = cfg.get("opciones") or {}
+        chat = opts.get("chat_manual") or "claude"
+        valid = [m for m, _n, _t in chat_models(chat)]
+        return opts.get("modelo_manual") if opts.get("modelo_manual") in valid else valid[0]
+
+    def manual_book_estimate(self) -> dict:
+        """Bloques (mensajes al chat) que faltan para terminar el libro en modo manual."""
+        p = self._need_project()
+        translator = Translator(p, None)
+        blocks = pending = 0
+        for i in p.chapter_indices():
+            data = p.load_chapter(i)
+            if data.get("omitir"):
+                continue
+            blocks += len(translator.manual_chunks(data))
+            pending += sum(1 for s in data["segmentos"] if not s.get("tgt"))
+        return {"bloques": blocks, "parrafos": pending, "bloque": translator.manual_block_chars()}
 
     def manual_status(self, index: int) -> dict:
         translator = Translator(self._need_project(), None)

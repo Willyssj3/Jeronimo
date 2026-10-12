@@ -39,6 +39,37 @@ CHAT_PRESETS = {
     "otro": ("Otro chat o modelo local", 6000),
 }
 
+# Modelos de cada chat por nivel («avanzado», «estandar», «rapido»). Se nombran
+# por familia (sin versión) para que no queden viejos.
+_GENERIC_MODELS = [("avanzado", "El más capaz (con razonamiento)", "avanzado"),
+                   ("estandar", "Estándar", "estandar"),
+                   ("rapido", "Rápido o ligero (mini, flash…)", "rapido")]
+CHAT_MODELS = {
+    "claude": [("opus", "Opus (el más capaz)", "avanzado"), ("sonnet", "Sonnet (equilibrado)", "estandar"),
+               ("haiku", "Haiku (rápido)", "rapido")],
+    "gemini": [("pro", "Pro (el más capaz)", "avanzado"), ("flash", "Flash (rápido)", "rapido")],
+}
+PLANS = {"pago": "De pago (Pro, Plus, Advanced…)", "gratis": "Gratuito"}
+# Proporción del bloque recomendado según el nivel del modelo y el plan.
+_TIER_FACTOR = {"avanzado": 1.0, "estandar": 0.85, "rapido": 0.6}
+_PLAN_FACTOR = {"pago": 1.0, "gratis": 0.5}
+BLOCK_SIZES = (4000, 6000, 8000, 10000, 12000, 15000, 25000)
+
+
+def chat_models(chat: str) -> list[tuple[str, str, str]]:
+    return CHAT_MODELS.get(chat, _GENERIC_MODELS)
+
+
+def model_tier(chat: str, model: str) -> str:
+    return next((tier for mid, _name, tier in chat_models(chat) if mid == model), "avanzado")
+
+
+def recommended_block(chat: str, model: str = "", plan: str = "pago") -> int:
+    """Tamaño de bloque prudente para ese chat, modelo y plan."""
+    base = CHAT_PRESETS.get(chat, CHAT_PRESETS["otro"])[1]
+    size = base * _TIER_FACTOR[model_tier(chat, model)] * _PLAN_FACTOR.get(plan, 1.0)
+    return max([b for b in BLOCK_SIZES if b <= size] or [BLOCK_SIZES[0]])
+
 
 @dataclass
 class Options:
