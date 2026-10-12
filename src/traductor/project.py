@@ -240,6 +240,47 @@ class Project:
         seg["avisos"] = []
         self.save_chapter(data)
 
+    def _deleted_path(self, index: int) -> Path:
+        return self.root / "capitulos" / "borrados" / f"{index:03d}.json"
+
+    def clear_translation(self, index: int) -> int:
+        """Borra toda la traducción de un capítulo y devuelve cuántos párrafos tenía.
+
+        Antes guarda una copia (``capitulos/borrados/``) para poder recuperarla."""
+        data = self.load_chapter(index)
+        done = sum(1 for s in data["segmentos"] if s.get("tgt"))
+        if not done:
+            return 0
+        write_json(self._deleted_path(index), data)
+        for seg in data["segmentos"]:
+            seg.update(tgt=None, avisos=[], nota=None, editado=False)
+            seg.pop("qa_ignorar", None)
+        data["aprobado"] = False
+        self.save_chapter(data)
+        return done
+
+    def has_deleted_translation(self, index: int) -> bool:
+        return self._deleted_path(index).exists()
+
+    def restore_translation(self, index: int) -> int:
+        """Recupera la traducción borrada en los párrafos que siguen vacíos."""
+        backup = read_json(self._deleted_path(index))
+        if not backup:
+            raise ValueError("No hay ninguna traducción borrada de este capítulo.")
+        data = self.load_chapter(index)
+        saved = {s["n"]: s for s in backup.get("segmentos", [])}
+        restored = 0
+        for seg in data["segmentos"]:
+            old = saved.get(seg["n"])
+            if not seg.get("tgt") and old and old.get("tgt") and old.get("src") == seg["src"]:
+                for key in ("tgt", "avisos", "nota", "editado", "qa_ignorar"):
+                    if key in old:
+                        seg[key] = old[key]
+                restored += 1
+        self.save_chapter(data)
+        self._deleted_path(index).unlink()
+        return restored
+
     # -- referencias (traducciones oficiales) ---------------------------------
 
     def add_reference(self, original: str | Path, translation: str | Path, *, name: str | None = None,

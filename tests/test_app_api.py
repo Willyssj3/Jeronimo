@@ -103,3 +103,27 @@ def test_chat_presets_and_manual_prep(api, tmp_path):
     assert "[[CHAPTER 0" in api.manual_prep_prompt()["texto"]
     api.manual_prep_cancel()
     assert api.manual_prep_status() is None
+
+
+def test_clear_and_restore_chapter_translation(api):
+    api.translate("capitulo", 0)
+    assert wait(api)["error"] is None
+    assert api.chapter(0)["hechos"] == 4
+    api.set_approved(0, True)
+
+    r = api.clear_translation(0)
+    assert r["borrados"] == 4
+    ch = api.chapter(0)
+    assert ch["hechos"] == 0 and not ch["aprobado"] and ch["copia_borrada"]
+    assert all(s["tgt"] is None and not s["nota"] and not s["avisos"] for s in ch["segmentos"])
+    assert api.clear_translation(0)["borrados"] == 0  # nada más que borrar
+
+    # Si después se traduce un párrafo a mano, recuperar no lo pisa.
+    api.save_segment(0, 3, "Mi versión.")
+    r = api.restore_translation(0)
+    assert r["recuperados"] == 3
+    ch = api.chapter(0)
+    assert ch["hechos"] == 4 and not ch["copia_borrada"]
+    assert ch["segmentos"][3]["tgt"] == "Mi versión." and ch["segmentos"][1]["tgt"].startswith("ES MIRELA")
+    with pytest.raises(ValueError):
+        api.restore_translation(0)

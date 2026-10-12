@@ -67,7 +67,9 @@ const ICONS = {
   carpeta: '<path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5v8.3A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18z"/>',
   pdf: '<path d="M6.5 3.5h7.5l4.5 4.5v11A1.5 1.5 0 0 1 17 20.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M14 3.5V8h4.5"/><path d="M8.5 12.5h7M8.5 16h5"/>',
   pluma: '<path d="M20 3.8C13.2 4.2 8.6 8.9 7.6 16.4c6.8-.9 11.4-5.4 12.4-12.6z"/><path d="M4 20l9-9"/><path d="M10.4 13.6h4.2"/>',
+  papelera: '<path d="M4.5 7h15"/><path d="M9.5 7V4.8h5V7"/><path d="M6.5 7l.9 12.6A1.5 1.5 0 0 0 8.9 21h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/><path d="M10.3 11v6M13.7 11v6"/>',
 };
+const svgIcon = (name) => h("span", { class: "btn-icon", html: `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>` });
 const icon = (name) => h("span", { class: "card-icon", html: `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>` });
 
 function pageHead(eyebrow, title, lead) {
@@ -369,7 +371,7 @@ async function render() {
   $("#main").scrollTop = 0;
   if (!state.summary) return renderHome(v);
   const views = { resumen: renderSummary, referencias: renderReferences, ia: renderAI, conocimiento: renderKnowledge,
-    capitulos: renderChapters, revision: renderReview, exportar: renderExport };
+    capitulos: renderChapters, revision: renderReview, calidad: renderQuality, exportar: renderExport };
   return (views[state.view] || renderSummary)(v);
 }
 
@@ -843,10 +845,37 @@ function renderChapters(v) {
           h("td", {}, h("div", { class: "row", style: "justify-content:flex-end;flex-wrap:nowrap" },
             h("button", { class: "small ghost", onclick: () => go("revision", c.index) }, "Revisar"),
             c.status !== "omitido" && c.done < c.total && !manual ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", c.index)) }, "Traducir") : null,
+            c.done ? h("button", { class: "small ghost danger-text icon-only", title: "Borrar la traducción de este capítulo", "aria-label": "Borrar la traducción",
+              disabled: busy && state.task && state.task.capitulo === c.index, onclick: () => clearChapter(c.index, c.title || `Documento ${c.index}`, c.done) }, svgIcon("papelera")) : null,
             h("button", { class: "small ghost", title: "No traducir este documento (créditos, publicidad…)", onclick: async () => {
               const sum = await guard(() => rpc("set_skipped", c.index, c.status !== "omitido"));
               if (sum) { state.summary = sum; render(); }
             } }, c.status === "omitido" ? "Incluir" : "Omitir"))))))));
+}
+
+/* ---------------------------------------------------------------- borrar y recuperar la traducción de un capítulo */
+
+async function clearChapter(index, title, done) {
+  const ok = await modal(h("div", {},
+    h("div", { class: "eyebrow" }, "Borrar traducción"),
+    h("h3", {}, title),
+    h("p", {}, `Se borrarán los ${done === 1 ? "1 párrafo traducido" : `${fmt(done)} párrafos traducidos`} de este capítulo, también tus correcciones, y dejará de estar aprobado.`),
+    h("p", { class: "muted small" }, "Se guarda una copia: si te arrepientes, puedes recuperarla desde la revisión del capítulo.")),
+  { ok: "Borrar traducción", okClass: "danger" });
+  if (!ok) return;
+  const r = await guard(() => rpc("clear_translation", index));
+  if (!r) return;
+  state.summary = r.resumen;
+  toast(`Traducción borrada: ${fmt(r.borrados)} párrafos.`);
+  render();
+}
+
+async function restoreChapter(index) {
+  const r = await guard(() => rpc("restore_translation", index));
+  if (!r) return;
+  state.summary = r.resumen;
+  toast(r.recuperados ? `Traducción recuperada: ${fmt(r.recuperados)} párrafos.` : "No había párrafos vacíos que recuperar.");
+  render();
 }
 
 /* ---------------------------------------------------------------- revisión */
@@ -870,6 +899,14 @@ async function renderReview(v) {
   const next = pos >= 0 && pos + 1 < list.length ? list[pos + 1] : null;
   const busy = state.task && state.task.activa;
   const manualMode = state.summary.proveedor.tipo === "manual";
+  const quality = await rpc("quality", index).catch(() => null);
+  const qaBySeg = {};
+  if (quality) {
+    qaTypes = quality.tipos;
+    // Los avisos de formato ya se muestran en cada párrafo.
+    quality.problemas.filter((p) => p.tipo !== "formato").forEach((p) => (qaBySeg[p.n] = qaBySeg[p.n] || []).push(p));
+  }
+  if (state.focusSeg !== null && state.focusSeg !== undefined) reviewFilter = "todos";
 
   const filterSel = h("select", { style: "width:auto", onchange: (e) => { reviewFilter = e.target.value; drawRows(); } },
     h("option", { value: "todos", selected: reviewFilter === "todos" }, "Todos los párrafos"),
@@ -880,9 +917,9 @@ async function renderReview(v) {
   const drawRows = () => {
     rows.textContent = "";
     const segs = data.segmentos.filter((s) => reviewFilter === "todos" ||
-      (reviewFilter === "pendientes" ? !s.tgt : (s.avisos.length || s.nota)));
+      (reviewFilter === "pendientes" ? !s.tgt : (s.avisos.length || s.nota || qaBySeg[s.n])));
     if (!segs.length) rows.appendChild(h("div", { class: "card empty-state" }, "No hay párrafos con este filtro."));
-    segs.forEach((s) => rows.appendChild(segmentRow(data, s)));
+    segs.forEach((s) => rows.appendChild(segmentRow(data, s, qaBySeg[s.n] || [])));
   };
   drawRows();
 
@@ -907,15 +944,38 @@ async function renderReview(v) {
           if (!approved) toast("Capítulo aprobado. Sus párrafos servirán de ejemplo para los siguientes.");
           render();
         } }, approved ? "Quitar aprobación" : "Aprobar capítulo"),
+        data.hechos ? h("button", { class: "small ghost danger-text", disabled: data.bloqueado, title: "Borrar toda la traducción de este capítulo",
+          onclick: () => clearChapter(index, data.titulo, data.hechos) }, svgIcon("papelera"), "Borrar traducción") : null,
         next ? h("button", { class: "small ghost", onclick: () => go("revision", next.index) }, "Siguiente ›") : null),
+      data.copia_borrada ? h("div", { class: "note row", style: "margin-top:8px;padding:8px 12px" },
+        h("span", { style: "flex:1" }, "Hay una traducción borrada de este capítulo."),
+        h("button", { class: "small ghost", disabled: data.bloqueado, onclick: () => restoreChapter(index) }, "Recuperarla")) : null,
       data.bloqueado ? h("div", { class: "warn", style: "margin-top:8px" }, "Este capítulo se está traduciendo. La vista se actualiza sola; podrás editar al terminar.") : null,
       data.resumen ? h("details", { style: "margin-top:8px" }, h("summary", { class: "muted small" }, "Resumen del capítulo"), h("p", { class: "small" }, data.resumen)) : null,
       h("div", { class: "seg-cols" }, h("span", {}, `Original · ${state.summary.idioma_origen}`), h("span", {}, `Traducción · ${state.summary.idioma_destino}`))),
     manualPanel(index),
     rows);
+  if (state.focusSeg !== null && state.focusSeg !== undefined) {
+    const el = $(`#seg-${state.focusSeg}`);
+    state.focusSeg = null;
+    if (el) {
+      el.scrollIntoView({ block: "center" });
+      el.classList.add("flash");
+    }
+  }
 }
 
-function segmentRow(data, s) {
+let qaTypes = {};
+
+function qaChip(data, s, p) {
+  const chip = h("span", { class: "qa " + p.nivel, title: (qaTypes[p.tipo] || {}).nombre || "" }, p.mensaje);
+  chip.appendChild(h("button", { class: "qa-x", title: "Ignorar este aviso", onclick: async () => {
+    if (await guard(() => rpc("quality_ignore", data.index, s.n, p.tipo, p.clave || ""))) chip.remove();
+  } }, "×"));
+  return chip;
+}
+
+function segmentRow(data, s, issues = []) {
   const marks = s.marcas || {};
   const src = h("div", { class: "src" + (/^h\d$/.test(s.tag) ? " tag-h" : "") });
   markedToDom(src, s.src, marks);
@@ -951,6 +1011,7 @@ function segmentRow(data, s) {
     h("span", { class: "muted" }, `§${s.n}`),
     s.avisos.map((w) => h("span", { class: "warn" }, w)),
     s.nota ? h("span", { class: "note" }, "Nota de la IA: " + s.nota) : null,
+    issues.map((p) => qaChip(data, s, p)),
     h("span", { class: "grow" }),
     status,
     state.summary.proveedor.tipo !== "manual" ? h("button", { class: "small ghost", disabled: data.bloqueado, onclick: async (e) => {
@@ -968,7 +1029,8 @@ function segmentRow(data, s) {
       status.className = "small saved";
     } }, "Retraducir") : null);
 
-  const row = h("div", { class: "seg" + (!s.tgt ? " pending" : s.avisos.length ? " flagged" : "") }, src, tgt, meta);
+  const flagged = s.avisos.length || issues.some((p) => p.nivel === "error");
+  const row = h("div", { id: `seg-${s.n}`, class: "seg" + (!s.tgt ? " pending" : flagged ? " flagged" : "") }, src, tgt, meta);
   return row;
 }
 
@@ -1047,6 +1109,69 @@ function manualPanel(index) {
   return panel;
 }
 
+/* ---------------------------------------------------------------- control de calidad */
+
+async function renderQuality(v) {
+  const r = await guard(() => rpc("quality"));
+  if (!r) return;
+  let filter = r.resumen[state.qaFilter] ? state.qaFilter : "";
+  const chips = h("div", { class: "qa-summary" });
+  const list = h("div", {});
+  const recount = () => {
+    r.resumen = {};
+    r.problemas.forEach((p) => { r.resumen[p.tipo] = (r.resumen[p.tipo] || 0) + 1; });
+    if (!r.resumen[filter]) filter = "";
+  };
+  const draw = () => {
+    chips.textContent = "";
+    const total = r.problemas.length;
+    chips.append(h("button", { class: "qa-chip" + (filter ? "" : " active"), onclick: () => { filter = state.qaFilter = ""; draw(); } },
+      h("span", { class: "count" }, fmt(total)), "Todos"));
+    for (const [k, t] of Object.entries(r.tipos)) {
+      if (!r.resumen[k]) continue;
+      chips.append(h("button", { class: `qa-chip ${t.nivel}` + (filter === k ? " active" : ""), onclick: () => { filter = state.qaFilter = k; draw(); } },
+        h("span", { class: "count" }, fmt(r.resumen[k])), t.nombre));
+    }
+    list.textContent = "";
+    const items = r.problemas.filter((p) => !filter || p.tipo === filter);
+    if (!items.length) {
+      list.append(h("div", { class: "card empty-state" }, h("div", { class: "ornament" }, h("span")),
+        r.parrafos ? `No hay avisos en los ${fmt(r.parrafos)} párrafos traducidos.` : "Todavía no hay párrafos traducidos para revisar."));
+      return;
+    }
+    const groups = new Map();
+    items.forEach((p) => { if (!groups.has(p.doc)) groups.set(p.doc, []); groups.get(p.doc).push(p); });
+    for (const [doc, ps] of groups) {
+      list.append(h("div", { class: "card qa-group" },
+        h("h3", {}, ps[0].titulo, h("span", { class: "muted small qa-count" }, ` · ${ps.length === 1 ? "1 aviso" : `${fmt(ps.length)} avisos`}`)),
+        ps.slice(0, 300).map((p) => h("div", { class: "qa-row" },
+          h("span", { class: "dot " + p.nivel, title: p.nivel === "error" ? "Probable error" : "Para revisar" }),
+          h("div", { style: "min-width:0" },
+            h("div", {}, h("strong", {}, r.tipos[p.tipo].nombre), h("span", { class: "muted" }, ` · §${p.n}`)),
+            h("div", {}, p.mensaje),
+            p.fragmento ? h("div", { class: "frag" }, p.fragmento) : null),
+          h("div", { class: "row", style: "flex-wrap:nowrap" },
+            h("button", { class: "small ghost", onclick: () => { state.focusSeg = p.n; go("revision", doc); } }, "Revisar"),
+            h("button", { class: "small ghost", title: "No volver a avisar de esto", onclick: async () => {
+              if (!(await guard(() => rpc("quality_ignore", p.doc, p.n, p.tipo, p.clave || "")))) return;
+              r.problemas = r.problemas.filter((x) => x !== p && !(p.clave && x.clave === p.clave));
+              recount();
+              draw();
+            } }, "Ignorar"))))));
+    }
+  };
+  draw();
+  put(v,
+    pageHead("Paso 4 de 5 · Revisión", "Control de calidad",
+      "Revisa toda la traducción sin gastar IA: términos del glosario, párrafos que pueden haber quedado incompletos, palabras en el idioma original, números, signos de apertura, rayas de diálogo y nombres escritos de varias formas. Son avisos para revisar: si alguno no es un error, ignóralo."),
+    h("div", { class: "row" },
+      h("span", { class: "muted small" }, h("span", { class: "dot error" }), " probable error   ", h("span", { class: "dot aviso" }), " para revisar"),
+      h("div", { class: "spacer" }),
+      h("span", { class: "muted small" }, `${fmt(r.parrafos)} párrafos revisados`),
+      h("button", { class: "ghost small", onclick: () => render() }, "Volver a revisar")),
+    chips, list);
+}
+
 /* ---------------------------------------------------------------- exportar */
 
 function renderExport(v) {
@@ -1063,10 +1188,20 @@ function renderExport(v) {
       h("button", { class: "ghost", onclick: () => rpc("open_folder", r.ruta) }, "Abrir carpeta")));
   };
   const title = h("input", { type: "text", value: s.titulo_traducido || "", placeholder: s.titulo });
+  const qaBox = h("div", {});
+  rpc("quality").then((q) => {
+    const errors = q.problemas.filter((p) => p.nivel === "error").length;
+    if (errors) {
+      put(qaBox, h("div", { class: "warn", style: "margin-top:12px" },
+        `El control de calidad encontró ${errors === 1 ? "1 posible error" : `${fmt(errors)} posibles errores`}. `,
+        h("button", { class: "link inline", onclick: () => go("calidad") }, "Revisarlos")));
+    }
+  }).catch(() => {});
   const missing = s.progreso.total - s.progreso.hechos;
   put(v,
     pageHead("Paso 5 de 5", "Exportar", "Genera el EPUB con la traducción. Conserva portada, imágenes, índice y estilos del original."),
     missing ? h("div", { class: "warn" }, `Aún faltan ${fmt(missing)} párrafos: en el EPUB quedarán en el idioma original.`) : null,
+    qaBox,
     h("div", { class: "card stack" },
       h("div", { class: "field" }, h("label", {}, "Título de la edición traducida"),
         h("div", { class: "path" }, title, h("button", { class: "ghost", onclick: async () => {

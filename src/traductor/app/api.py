@@ -17,7 +17,7 @@ from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
 
-from .. import __version__, inline, knowledge, updates
+from .. import __version__, inline, knowledge, qa, updates
 from ..epub import EpubBook, EpubError
 from ..pdf2epub import PdfError
 from ..inline import localname
@@ -499,6 +499,7 @@ class Api:
             "hechos": info.done,
             "resumen": p.bible().get("capitulos", {}).get(str(index), ""),
             "bloqueado": self._tasks.state["activa"] and self._tasks.state.get("capitulo") == index,
+            "copia_borrada": p.has_deleted_translation(index),
             "segmentos": [
                 {"n": s["n"], "tag": s.get("tag", ""), "src": s["src"], "tgt": s.get("tgt"),
                  "nota": s.get("nota"), "avisos": s.get("avisos", []), "editado": s.get("editado", False),
@@ -546,6 +547,18 @@ class Api:
             raise ProviderError("La IA no devolvió la traducción de este párrafo. Prueba otra vez.")
         p.save_chapter(data)
         return {"tgt": seg["tgt"], "avisos": seg.get("avisos", []), "nota": seg.get("nota")}
+
+    def clear_translation(self, index: int) -> dict:
+        """Borra toda la traducción de un capítulo (se guarda una copia)."""
+        self._check_not_busy(index)
+        deleted = self._need_project().clear_translation(index)
+        return {"borrados": deleted, "resumen": self.project_summary()}
+
+    def restore_translation(self, index: int) -> dict:
+        """Recupera la traducción borrada de un capítulo."""
+        self._check_not_busy(index)
+        restored = self._need_project().restore_translation(index)
+        return {"recuperados": restored, "resumen": self.project_summary()}
 
     def set_approved(self, index: int, approved: bool = True) -> dict:
         self._need_project().set_approved(index, approved)
@@ -643,6 +656,18 @@ class Api:
 
     def manual_prep_cancel(self) -> bool:
         self._manual_prep().cancel()
+        return True
+
+    # -- control de calidad (sin IA) -------------------------------------------
+
+    def quality(self, index: int | None = None) -> dict:
+        """Avisos de calidad de todo el libro o de un capítulo."""
+        return qa.check_project(self._need_project(), index)
+
+    def quality_ignore(self, index: int, n: int, kind: str, key: str = "") -> bool:
+        """No volver a mostrar ese aviso (en ese párrafo, o ese nombre en todo el libro)."""
+        self._check_not_busy(index)
+        qa.ignore(self._need_project(), index, n, kind, key)
         return True
 
     # -- exportación -----------------------------------------------------------
