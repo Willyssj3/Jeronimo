@@ -1873,7 +1873,6 @@ function renderExport(v) {
       r.total_avisos ? h("p", { class: "warn" }, `${r.total_avisos} párrafo(s) con avisos de formato; revisa: ${r.avisos.slice(0, 5).join(" · ")}`) : null,
       h("button", { class: "ghost", onclick: () => rpc("open_folder", r.ruta) }, "Abrir carpeta")));
   };
-  const title = h("input", { type: "text", value: s.titulo_traducido || "", placeholder: s.titulo });
   const qaBox = h("div", {});
   rpc("quality").then((q) => {
     const errors = q.problemas.filter((p) => p.nivel === "error").length;
@@ -1888,18 +1887,61 @@ function renderExport(v) {
     pageHead("Paso 5 de 5", "Exportar", "Genera el EPUB con la traducción. Conserva imágenes, índice y estilos del original; la portada puede ser la original o una nueva con el título traducido."),
     missing ? h("div", { class: "warn" }, `Aún faltan ${fmt(missing)} párrafos: en el EPUB quedarán en el idioma original.`) : null,
     qaBox,
+    metadataCard(),
     coverCard(),
-    otherFormatsCard(),
     h("div", { class: "card stack" },
-      h("div", { class: "field" }, h("label", {}, "Título de la edición traducida ", h("span", { class: "hint" }, "(el que muestra el lector en la biblioteca)")),
-        h("div", { class: "path" }, title, h("button", { class: "ghost", onclick: async () => {
-          const sum = await guard(() => rpc("set_settings", { titulo_traducido: title.value.trim() }));
-          if (sum) { state.summary = sum; toast("Título guardado."); }
-        } }, "Guardar"))),
+      cardHead("libro", "Generar el EPUB"),
       h("div", { class: "row" },
         h("button", { class: "gold", onclick: () => run(false) }, "Generar EPUB traducido"),
         h("button", { class: "ghost", onclick: () => run(true) }, "Generar EPUB bilingüe"))),
-    result);
+    result,
+    otherFormatsCard());
+}
+
+/* ---------------------------------------------------------------- datos del libro (metadatos) */
+
+function metadataCard() {
+  const box = h("div", { class: "card stack" }, h("p", { class: "muted" }, "Cargando los datos del libro…"));
+  guard(() => rpc("book_metadata")).then((m) => {
+    if (!m) return;
+    box.textContent = "";
+    const inputs = {};
+    const field = (key, label, hint = "", opts = {}) => {
+      const input = opts.area ? h("textarea", { style: "min-height:110px" })
+        : h("input", { type: "text", placeholder: opts.placeholder || m.original[key] || "" });
+      input.value = m.datos[key] || "";
+      inputs[key] = input;
+      return h("div", { class: "field" + (opts.wide ? " wide" : ""), style: "margin:0" },
+        h("label", {}, label, hint ? h("span", { class: "hint" }, " " + hint) : null), input);
+    };
+    put(box,
+      cardHead("libro", "Datos del libro"),
+      h("p", { class: "muted", style: "margin-bottom:0" }, "Los metadatos del EPUB traducido: lo que muestran el lector y la biblioteca. Parten de los del original y solo se cambian los que edites. También se usan en Word y PDF."),
+      h("div", { class: "meta-grid" },
+        field("titulo", "Título", "", { wide: true }),
+        field("autor", "Autor", "(si son varios, sepáralos con comas)"),
+        field("traductor", "Traducción", "(quién tradujo)", { placeholder: "Tu nombre" }),
+        field("editorial", "Editorial"),
+        field("fecha", "Fecha de publicación", "(2026 o 2026-10-12)"),
+        field("serie", "Serie"),
+        field("serie_numero", "Número en la serie"),
+        field("isbn", "ISBN de esta edición", "(opcional)"),
+        field("temas", "Temas", "(separados por comas)"),
+        field("descripcion", "Descripción", "(sinopsis que se ve en la biblioteca)", { area: true, wide: true })),
+      h("div", { class: "row end" }, h("button", { onclick: async () => {
+        const values = {};
+        for (const [k, el] of Object.entries(inputs)) values[k] = el.value;
+        const r = await guard(() => rpc("set_book_metadata", values));
+        if (!r) return;
+        toast("Datos del libro guardados.");
+        state.summary = await rpc("project_summary");
+        // Volver a dibujar (la portada toma el título nuevo) sin perder la posición.
+        const top = $("#main").scrollTop;
+        await render();
+        $("#main").scrollTop = top;
+      } }, "Guardar datos")));
+  });
+  return box;
 }
 
 /* ---------------------------------------------------------------- Word y PDF */
@@ -1926,19 +1968,65 @@ function otherFormatsCard() {
 
 function coverCard() {
   const box = h("div", { class: "card" }, h("p", { class: "muted" }, "Cargando portada…"));
-  guard(() => rpc("cover_settings")).then((cfg) => {
-    if (!cfg) return;
+  guard(() => rpc("cover_settings")).then((loaded) => {
+    if (!loaded) return;
+    let cfg = loaded;
     box.textContent = "";
     const use = h("input", { type: "checkbox", checked: cfg.usar });
     const style = h("select", { style: "width:auto" },
       h("option", { value: "difuminada", selected: cfg.estilo === "difuminada", disabled: !cfg.tiene_original }, "Con la portada original difuminada de fondo"),
-      h("option", { value: "lisa", selected: cfg.estilo === "lisa" || !cfg.tiene_original }, "Fondo azul tinta con filetes dorados"));
+      h("option", { value: "lisa", selected: cfg.estilo === "lisa" || (!cfg.tiene_original && cfg.estilo !== "propia") }, "Fondo azul tinta con filetes dorados"),
+      h("option", { value: "propia", selected: cfg.estilo === "propia" }, "Mi propia imagen"));
+    const ownBox = h("div", { class: "row" });
+    const fileInput = h("input", { type: "file", accept: "image/jpeg,image/png,image/webp", hidden: true, onchange: async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      if (file.size > 15e6) return toast("La imagen es demasiado grande (máximo 15 MB).", true);
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+        reader.readAsDataURL(file);
+      }).catch((err) => { toast(err.message, true); return null; });
+      if (!dataUrl) return;
+      const r = await guard(() => rpc("set_cover_image", dataUrl));
+      if (!r) return;
+      cfg = r;
+      use.checked = true;
+      style.value = "propia";
+      toast("Imagen de portada cargada.");
+      drawOwn();
+      refresh();
+    } });
+    const drawOwn = () => {
+      ownBox.textContent = "";
+      const own = style.value === "propia";
+      [title, author].forEach((el) => { el.disabled = own; });
+      if (!own) return;
+      put(ownBox,
+        h("button", { class: "ghost", onclick: () => fileInput.click() }, cfg.tiene_propia ? "Cambiar mi imagen…" : "Subir mi imagen…"),
+        cfg.tiene_propia ? h("button", { class: "ghost danger-text", onclick: async () => {
+          const r = await guard(() => rpc("remove_cover_image"));
+          if (!r) return;
+          cfg = r;
+          style.value = cfg.tiene_original ? "difuminada" : "lisa";
+          drawOwn();
+          refresh();
+        } }, "Quitar mi imagen") : null,
+        h("span", { class: "muted small" }, "JPG, PNG o WEBP, vertical (por ejemplo, 1600 × 2400 píxeles)."));
+    };
+    style.addEventListener("change", () => {
+      drawOwn();
+      if (style.value === "propia" && !cfg.tiene_propia) fileInput.click();
+    });
     const title = h("input", { type: "text", value: cfg.titulo, placeholder: "Título de la edición traducida" });
     const author = h("input", { type: "text", value: cfg.autor, placeholder: "Autor" });
     const imgNew = h("img", { class: "cover-img", alt: "Portada nueva" });
     const imgOld = h("img", { class: "cover-img", alt: "Portada original" });
     const warn = h("div", {});
-    const values = () => ({ usar: use.checked, estilo: style.value, titulo: title.value, autor: author.value });
+    const values = () => ({ usar: use.checked, estilo: style.value === "propia" && !cfg.tiene_propia ? "difuminada" : style.value,
+      titulo: title.value, autor: author.value });
     let timer = null;
     const refresh = () => {
       clearTimeout(timer);
@@ -1956,6 +2044,7 @@ function coverCard() {
       }, 350);
     };
     [use, style].forEach((el) => el.addEventListener("change", refresh));
+    drawOwn();
     [title, author].forEach((el) => el.addEventListener("input", refresh));
     const newFig = h("figure", { class: "cover-fig" }, imgNew, h("figcaption", {}, "Nueva"));
     put(box,
@@ -1969,6 +2058,7 @@ function coverCard() {
           h("div", { class: "field", style: "margin-bottom:0" }, h("label", {}, "Título en la portada"), title),
           h("div", { class: "field", style: "margin-bottom:0" }, h("label", {}, "Autor en la portada"), author),
           h("div", { class: "field", style: "margin-bottom:0" }, h("label", {}, "Estilo"), style),
+          ownBox, fileInput,
           warn),
         h("div", { class: "cover-previews" },
           cfg.tiene_original ? h("figure", { class: "cover-fig" }, imgOld, h("figcaption", {}, "Original")) : null,

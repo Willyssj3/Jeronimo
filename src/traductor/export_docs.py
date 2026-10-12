@@ -129,7 +129,7 @@ def export_docx(project, out: Path, *, bilingual: bool = False, progress=None) -
     from docx.shared import Cm, Pt
 
     chapters = collect(project, with_source=bilingual)
-    cfg = project.config
+    meta = project.book_metadata()
     doc = Document()
     section = doc.sections[0]
     section.page_height, section.page_width = Cm(29.7), Cm(21)
@@ -146,9 +146,12 @@ def export_docx(project, out: Path, *, bilingual: bool = False, progress=None) -
         style.font.color.rgb = None
 
     core = doc.core_properties
-    core.title = cfg.get("titulo_traducido") or cfg.get("titulo", "")
-    core.author = cfg.get("autor", "")
+    core.title = meta["titulo"]
+    core.author = meta["autor"]
     core.language = project.target_lang
+    core.subject = meta.get("serie", "")
+    core.keywords = meta.get("temas", "")
+    core.comments = meta.get("descripcion", "")
 
     def fill(paragraph, runs: list[Run]) -> None:
         for r in runs:
@@ -168,6 +171,9 @@ def export_docx(project, out: Path, *, bilingual: bool = False, progress=None) -
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if core.author:
         p = doc.add_paragraph(core.author)
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if meta.get("traductor"):
+        p = doc.add_paragraph(f"Traducción de {meta['traductor']}")
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     for k, ch in enumerate(chapters):
@@ -291,14 +297,17 @@ def export_pdf(project, out: Path, *, page: str = "a5", progress=None) -> Path:
 
     frame = Frame(margin_x, margin_bottom, pagesize[0] - 2 * margin_x, pagesize[1] - margin_top - margin_bottom,
                   leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
-    cfg = project.config
-    doc = BaseDocTemplate(str(out), pagesize=pagesize, title=cfg.get("titulo_traducido") or cfg.get("titulo", ""),
-                          author=cfg.get("autor", ""), lang=project.target_lang,
+    meta = project.book_metadata()
+    doc = BaseDocTemplate(str(out), pagesize=pagesize, title=meta["titulo"], author=meta["autor"],
+                          subject=meta.get("descripcion", "")[:200], lang=project.target_lang,
                           pageTemplates=[PageTemplate("portadilla", [frame]),
                                          PageTemplate("texto", [frame], onPage=numbers)])
     story = [Spacer(1, pagesize[1] * 0.28), Paragraph(html.escape(doc.title or ""), title_style)]
-    if cfg.get("autor"):
-        story.append(Paragraph(html.escape(cfg["autor"]), author_style))
+    if meta["autor"]:
+        story.append(Paragraph(html.escape(meta["autor"]), author_style))
+    if meta.get("traductor"):
+        story.append(Paragraph(html.escape(f"Traducción de {meta['traductor']}"),
+                               ParagraphStyle("trad", parent=author_style, fontName="EBG-I", fontSize=size * 1.05)))
     story.append(NextPageTemplate("texto"))
     for k, ch in enumerate(chapters):
         story.append(PageBreak())

@@ -374,6 +374,39 @@ class EpubBook:
         """Código de idioma de dos letras (``eng`` y ``en-US`` pasan a ``en``)."""
         return normalize_lang(self._dc("language"))
 
+    def metadata(self) -> dict:
+        """Metadatos del libro, para mostrarlos y editarlos."""
+        root = self.opf.getroot()
+
+        def texts(name: str) -> list[str]:
+            out = []
+            for el in root.iterfind(f".//dc:{name}", NS):
+                text = " ".join(inline.element_text(el).split())
+                if text:
+                    out.append(text)
+            return out
+
+        series = number = ""
+        for m in root.iterfind(".//opf:metadata/opf:meta", NS):
+            if m.get("name") == "calibre:series":
+                series = m.get("content", "")
+            elif m.get("name") == "calibre:series_index":
+                number = m.get("content", "")
+            elif m.get("property") == "belongs-to-collection" and not series:
+                series = (m.text or "").strip()
+            elif m.get("property") == "group-position" and not number:
+                number = (m.text or "").strip()
+        isbn = ""
+        for ident in texts("identifier"):
+            digits = re.sub(r"(?i)^urn:isbn:|[-\s]", "", ident)
+            if re.fullmatch(r"(97[89]\d{9}[\dXx]|\d{9}[\dXx])", digits):
+                isbn = digits
+                break
+        description = " ".join(re.sub(r"<[^>]+>", " ", html.unescape((texts("description") or [""])[0])).split())
+        return {"titulo": self.title, "autor": ", ".join(texts("creator")), "editorial": (texts("publisher") or [""])[0],
+                "descripcion": description, "fecha": (texts("date") or [""])[0][:10], "temas": ", ".join(texts("subject")),
+                "serie": series, "serie_numero": number.removesuffix(".0"), "isbn": isbn, "idioma": self.language}
+
     def toc_labels(self) -> dict[str, str]:
         """Ruta de documento -> título según el índice (NAV o NCX)."""
         labels: dict[str, str] = {}
@@ -516,10 +549,12 @@ class EpubBook:
         return None
 
     def render_opf(self, *, target_lang: str, bilingual: bool, title: str | None,
-                   new_cover: dict | None = None) -> bytes:
+                   new_cover: dict | None = None, metadata: dict | None = None) -> bytes:
         tree = parse_xml(self.read(self.opf_path))
         root = tree.getroot()
         meta = root.find("opf:metadata", NS)
+        if metadata and meta is not None:
+            _apply_metadata(root, meta, metadata)
         if new_cover is not None:
             # Portada añadida: nuevo elemento del manifiesto marcado como portada (EPUB 3 y 2).
             manifest = root.find("opf:manifest", NS)
@@ -560,7 +595,8 @@ class EpubBook:
         return serialize(tree)
 
     def write(self, out_path: str | Path, translations: dict[int, list[str | None]], *,
-              target_lang: str, bilingual: bool = False, title: str | None = None, cover=None) -> list[str]:
+              target_lang: str, bilingual: bool = False, title: str | None = None, cover=None,
+              metadata: dict | None = None) -> list[str]:
         """Escribe el EPUB traducido. ``translations`` va de índice de
         documento a la lista de traducciones (marcadas) por segmento; ``None``
         deja el segmento original. ``cover``, si se da, es una función
@@ -597,7 +633,7 @@ class EpubBook:
             modified[doc.path] = data
             warnings.extend(warns)
         modified[self.opf_path] = self.render_opf(target_lang=target_lang, bilingual=bilingual, title=title,
-                                                  new_cover=new_cover)
+                                                  new_cover=new_cover, metadata=metadata)
 
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -623,6 +659,103 @@ class EpubBook:
                 zout.writestr(info, data)
         tmp.replace(out_path)
         return warnings
+
+
+def _names(value: str) -> list[str]:
+    return [n.strip() for n in re.split(r"[;,]|\s+y\s+|\s+and\s+|\s+&\s+", value or "") if n.strip()]
+
+
+def _apply_metadata(root, meta, m: dict) -> None:
+    """Escribe en el OPF los metadatos editados (EPUB 3 con «refines», EPUB 2 con atributos)."""
+    dc, opf = NS["dc"], NS["opf"]
+    epub3 = root.get("version", "").startswith("3")
+
+    def drop(el) -> None:
+        if el.get("id"):
+            for ref in meta.findall(f"opf:meta[@refines='#{el.get('id')}']", NS):
+                meta.remove(ref)
+        meta.remove(el)
+
+    # En EPUB 2 los atributos van con el prefijo «opf:», como esperan los lectores.
+    opf_ns = None if epub3 else {"opf": opf}
+
+    def add(name: str, text: str, ident: str = "", role: str = "") -> None:
+        el = etree.SubElement(meta, f"{{{dc}}}{name}", nsmap=opf_ns)
+        el.text = text
+        if ident:
+            el.set("id", ident)
+        if role:
+            if epub3 and ident:
+                ref = etree.SubElement(meta, f"{{{opf}}}meta", refines=f"#{ident}", property="role", scheme="marc:relators")
+                ref.text = role
+            elif not epub3:
+                el.set(f"{{{opf}}}role", role)
+
+    def roles(el) -> set[str]:
+        out = {el.get(f"{{{opf}}}role", "")}
+        if el.get("id"):
+            out |= {(r.text or "").strip() for r in meta.findall(f"opf:meta[@refines='#{el.get('id')}']", NS)
+                    if r.get("property") == "role"}
+        return out
+
+    def single(name: str, value: str) -> None:
+        if not value:
+            return
+        found = meta.findall(f"dc:{name}", NS)
+        for el in found[1:]:
+            drop(el)
+        if found:
+            found[0].text = value
+        else:
+            add(name, value)
+
+    if m.get("titulo"):
+        found = meta.find("dc:title", NS)
+        if found is not None:
+            found.text = m["titulo"]
+        else:
+            add("title", m["titulo"])
+    if m.get("autor"):
+        for el in meta.findall("dc:creator", NS):
+            drop(el)
+        for k, name in enumerate(_names(m["autor"])):
+            add("creator", name, f"autor{k + 1}", "aut")
+    if m.get("traductor"):
+        for el in meta.findall("dc:contributor", NS) + meta.findall("dc:creator", NS):
+            if "trl" in roles(el):
+                drop(el)
+        for k, name in enumerate(_names(m["traductor"])):
+            add("contributor", name, f"traduccion{k + 1}", "trl")
+    single("publisher", m.get("editorial", ""))
+    single("description", m.get("descripcion", ""))
+    single("date", m.get("fecha", ""))
+    if m.get("temas"):
+        for el in meta.findall("dc:subject", NS):
+            drop(el)
+        for subject in _names(m["temas"]):
+            add("subject", subject)
+    if m.get("serie"):
+        for el in meta.findall("opf:meta", NS):
+            if el.get("name") in ("calibre:series", "calibre:series_index") or el.get("property") == "belongs-to-collection":
+                drop(el)
+        etree.SubElement(meta, f"{{{opf}}}meta", name="calibre:series", content=m["serie"])
+        if m.get("serie_numero"):
+            etree.SubElement(meta, f"{{{opf}}}meta", name="calibre:series_index", content=str(m["serie_numero"]))
+        if epub3:
+            col = etree.SubElement(meta, f"{{{opf}}}meta", id="serie", property="belongs-to-collection")
+            col.text = m["serie"]
+            etree.SubElement(meta, f"{{{opf}}}meta", refines="#serie", property="collection-type").text = "series"
+            if m.get("serie_numero"):
+                etree.SubElement(meta, f"{{{opf}}}meta", refines="#serie", property="group-position").text = str(m["serie_numero"])
+    if m.get("isbn"):
+        for el in meta.findall("dc:identifier[@id='isbn-traduccion']", NS):
+            drop(el)
+        el = etree.SubElement(meta, f"{{{dc}}}identifier", id="isbn-traduccion", nsmap=opf_ns)
+        if epub3:
+            el.text = f"urn:isbn:{m['isbn']}"
+        else:
+            el.text = m["isbn"]
+            el.set(f"{{{opf}}}scheme", "ISBN")
 
 
 def _set_lang(root, lang: str) -> None:

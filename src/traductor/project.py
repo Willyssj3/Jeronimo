@@ -390,27 +390,103 @@ class Project:
 
     # -- exportación ---------------------------------------------------------
 
+    # -- metadatos de la edición traducida -------------------------------------
+
+    META_FIELDS = ("titulo", "autor", "traductor", "editorial", "descripcion", "fecha", "temas", "serie",
+                   "serie_numero", "isbn")
+
+    def book_metadata(self) -> dict:
+        """Metadatos de la edición traducida: los editados o, si faltan, los del original."""
+        with EpubBook(self.book_path) as book:
+            original = book.metadata()
+        out = dict(original, traductor="", idioma=self.target_lang)
+        out["titulo"] = self.config.get("titulo_traducido") or original["titulo"]
+        out.update(self.config.get("metadatos") or {})
+        return out
+
+    def set_book_metadata(self, values: dict) -> dict:
+        """Guarda los metadatos editados (solo estos se cambian en el EPUB)."""
+        clean = {k: " ".join(str(values.get(k) or "").split()) for k in self.META_FIELDS if k in values}
+        if "descripcion" in values:  # la descripción conserva sus saltos de párrafo
+            clean["descripcion"] = "\n".join(" ".join(line.split()) for line in str(values["descripcion"] or "").splitlines()).strip()
+        if clean.get("fecha") and not re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", clean["fecha"]):
+            raise ValueError("La fecha debe ser un año (2026) o una fecha completa (2026-10-12).")
+        if clean.get("isbn"):
+            isbn = re.sub(r"[-\s]", "", clean["isbn"]).upper()
+            if not re.fullmatch(r"\d{13}|\d{9}[\dX]", isbn):
+                raise ValueError("El ISBN debe tener 10 o 13 dígitos.")
+            clean["isbn"] = isbn
+        if clean.get("serie_numero") and not re.fullmatch(r"\d+([.,]\d+)?", clean["serie_numero"]):
+            raise ValueError("El número en la serie debe ser un número.")
+        saved = {k: v for k, v in {**(self.config.get("metadatos") or {}), **clean}.items() if v}
+        self.config["metadatos"] = saved
+        if "titulo" in clean:
+            self.config["titulo_traducido"] = clean["titulo"]
+        self.save_config()
+        return self.book_metadata()
+
     def export(self, *, bilingual: bool = False, out_path: str | Path | None = None) -> tuple[Path, list[str]]:
         translations: dict[int, list[str | None]] = {}
         for i in self.chapter_indices():
             data = self.load_chapter(i)
             translations[i] = [s.get("tgt") for s in data["segmentos"]]
         title = self.config.get("titulo_traducido") or None
+        edited = dict(self.config.get("metadatos") or {})
+        if bilingual:
+            edited.pop("titulo", None)  # la edición bilingüe conserva el título original
         stem = slugify(self.config.get("nombre") or "libro")
         suffix = f"bilingue-{self.source_lang}-{self.target_lang}" if bilingual else self.target_lang
         out = Path(out_path) if out_path else self.root / "salida" / f"{stem}.{suffix}.epub"
         with EpubBook(self.book_path) as book:
             warnings = book.write(out, translations, target_lang=self.target_lang,
                                   bilingual=bilingual, title=None if bilingual else title,
-                                  cover=None if bilingual else self.cover_maker())
+                                  cover=None if bilingual else self.cover_maker(), metadata=edited)
         return out, warnings
+
+    @property
+    def own_cover_path(self) -> Path:
+        return self.root / "portada" / "propia.jpg"
+
+    def set_own_cover(self, data: bytes) -> None:
+        """Guarda una imagen de portada hecha por la persona (JPG, PNG o WEBP)."""
+        import io
+
+        from PIL import Image
+
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                im.load()
+                img = im.convert("RGB")
+        except Exception as e:
+            raise ValueError("No se pudo leer la imagen: usa un archivo JPG, PNG o WEBP.") from e
+        if min(img.size) < 300:
+            raise ValueError("La imagen es muy pequeña: usa una de al menos 300 píxeles de ancho.")
+        if img.height > 3200:
+            img = img.resize((round(img.width * 3200 / img.height), 3200), Image.LANCZOS)
+        self.own_cover_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(self.own_cover_path, "JPEG", quality=92, optimize=True)
+        cover = dict(self.config.get("portada") or {}, usar=True, estilo="propia")
+        self.config["portada"] = cover
+        self.save_config()
+
+    def remove_own_cover(self) -> None:
+        self.own_cover_path.unlink(missing_ok=True)
+        cover = dict(self.config.get("portada") or {})
+        if cover.get("estilo") == "propia":
+            cover["estilo"] = "difuminada"
+        self.config["portada"] = cover
+        self.save_config()
 
     def cover_settings(self) -> dict:
         """Portada traducida: si se usa, estilo, título y autor que se muestran."""
         saved = self.config.get("portada") or {}
-        return {"usar": bool(saved.get("usar")), "estilo": saved.get("estilo") or "difuminada",
-                "titulo": saved.get("titulo") or self.config.get("titulo_traducido") or self.config.get("titulo", ""),
-                "autor": saved.get("autor") or self.config.get("autor", "")}
+        meta = self.book_metadata()
+        style = saved.get("estilo") or "difuminada"
+        if style == "propia" and not self.own_cover_path.exists():
+            style = "difuminada"
+        return {"usar": bool(saved.get("usar")), "estilo": style,
+                "titulo": saved.get("titulo") or meta["titulo"], "autor": saved.get("autor") or meta["autor"],
+                "tiene_propia": self.own_cover_path.exists()}
 
     def cover_maker(self, settings: dict | None = None):
         """Función que crea la portada nueva para ``EpubBook.write`` (o None)."""
@@ -419,7 +495,25 @@ class Project:
         from .cover import unsupported_chars
 
         cfg = settings or self.cover_settings()
-        if not cfg["usar"] or unsupported_chars(cfg["titulo"] + cfg["autor"]):
-            return None  # sin portada nueva, o con letras que la tipografía no tiene
+        if not cfg["usar"]:
+            return None
+        if cfg["estilo"] == "propia":
+            own = self.own_cover_path.read_bytes()
+
+            def convert(fmt, _original, _aspect):
+                import io
+
+                from PIL import Image
+
+                if fmt.upper() == "JPEG":
+                    return own
+                buf = io.BytesIO()
+                with Image.open(io.BytesIO(own)) as im:
+                    im.save(buf, "PNG", optimize=True)
+                return buf.getvalue()
+
+            return convert
+        if unsupported_chars(cfg["titulo"] + cfg["autor"]):
+            return None  # letras que la tipografía no tiene: se queda la original
         return lambda fmt, original, aspect: make_cover(cfg["titulo"], cfg["autor"], style=cfg["estilo"],
                                                           original=original, fmt=fmt, aspect=aspect)

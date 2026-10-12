@@ -95,7 +95,8 @@ def test_cover_api(tmp_path, monkeypatch):
     api = Api(mode="navegador")
     api.create_project(str(book), str(tmp_path / "p"))
     cfg = api.cover_settings()
-    assert cfg == {"usar": False, "estilo": "difuminada", "titulo": "Nets", "autor": "Test Author", "tiene_original": False}
+    assert cfg == {"usar": False, "estilo": "difuminada", "titulo": "Nets", "autor": "Test Author",
+                   "tiene_propia": False, "tiene_original": False}
     cfg = api.set_cover({"usar": True, "estilo": "lisa", "titulo": "Redes"})
     assert cfg["usar"] and cfg["estilo"] == "lisa" and cfg["titulo"] == "Redes"
     pv = api.cover_preview({"titulo": "Redes de prueba"})

@@ -904,6 +904,18 @@ class Api:
         self._tasks.start(name, run)
         return self.task_status()
 
+    # -- metadatos de la edición traducida ------------------------------------------
+
+    def book_metadata(self) -> dict:
+        p = self._need_project()
+        with EpubBook(p.book_path) as book:
+            original = book.metadata()
+        return {"datos": p.book_metadata(), "original": original, "editados": sorted((p.config.get("metadatos") or {}))}
+
+    def set_book_metadata(self, values: dict) -> dict:
+        self._need_project().set_book_metadata(values or {})
+        return self.book_metadata()
+
     # -- portada traducida ---------------------------------------------------------
 
     def cover_settings(self) -> dict:
@@ -916,12 +928,36 @@ class Api:
         p = self._need_project()
         current = p.cover_settings()
         style = values.get("estilo", current["estilo"])
-        if style not in ("difuminada", "lisa"):
+        if style not in ("difuminada", "lisa", "propia"):
             raise ValueError("Estilo de portada desconocido.")
+        if style == "propia" and not p.own_cover_path.exists():
+            raise ValueError("Primero sube tu imagen de portada.")
         p.config["portada"] = {"usar": bool(values.get("usar", current["usar"])), "estilo": style,
                                "titulo": str(values.get("titulo", current["titulo"])).strip(),
                                "autor": str(values.get("autor", current["autor"])).strip()}
         p.save_config()
+        return self.cover_settings()
+
+    def set_cover_image(self, data_url: str) -> dict:
+        """Guarda la imagen de portada propia (``data:image/...;base64,...``)."""
+        import base64
+        import binascii
+
+        p = self._need_project()
+        head, _, body = (data_url or "").partition(",")
+        if not head.startswith("data:image/") or ";base64" not in head:
+            raise ValueError("Elige una imagen JPG, PNG o WEBP.")
+        if len(body) > 20_000_000:
+            raise ValueError("La imagen es demasiado grande (máximo unos 15 MB).")
+        try:
+            data = base64.b64decode(body, validate=True)
+        except (binascii.Error, ValueError) as e:
+            raise ValueError("No se pudo leer la imagen.") from e
+        p.set_own_cover(data)
+        return self.cover_settings()
+
+    def remove_cover_image(self) -> dict:
+        self._need_project().remove_own_cover()
         return self.cover_settings()
 
     def cover_preview(self, values: dict | None = None) -> dict:
@@ -950,9 +986,17 @@ class Api:
                     thumb = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
             except Exception:
                 original = None
+        if cfg.get("estilo") == "propia" and p.own_cover_path.exists():
+            with Image.open(p.own_cover_path) as im:
+                small = im.convert("RGB")
+                small.thumbnail((360, 640))
+                buf = io.BytesIO()
+                small.save(buf, "JPEG", quality=85)
+            return {"nueva": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii"),
+                    "original": thumb, "faltan": []}
         missing = sorted(unsupported_chars(cfg["titulo"] + cfg["autor"]))
-        new = make_cover(cfg["titulo"], cfg["autor"], style=cfg["estilo"], original=original, aspect=aspect,
-                         size=(360, round(360 * aspect)))
+        new = make_cover(cfg["titulo"], cfg["autor"], style=cfg["estilo"] if cfg["estilo"] != "propia" else "difuminada",
+                         original=original, aspect=aspect, size=(360, round(360 * aspect)))
         return {"nueva": "data:image/jpeg;base64," + base64.b64encode(new).decode("ascii"),
                 "original": thumb, "faltan": missing[:20]}
 
