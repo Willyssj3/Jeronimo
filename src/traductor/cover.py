@@ -8,6 +8,7 @@ de fondo, para conservar sus colores sin que se lea el título original) y
 from __future__ import annotations
 
 import io
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -25,12 +26,17 @@ def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(FONTS / f"EBGaramond-{name}.ttf"), size)
 
 
+@lru_cache(maxsize=1)
+def _covered() -> frozenset[int]:
+    from reportlab.pdfbase.ttfonts import TTFontFile
+
+    return frozenset(TTFontFile(str(FONTS / "EBGaramond-SemiBold.ttf")).charToGlyph)
+
+
 def unsupported_chars(text: str) -> set[str]:
     """Caracteres que la tipografía de la portada no tiene (p. ej. chino o japonés)."""
-    from fontTools.ttLib import TTFont
-
-    cmap = TTFont(str(FONTS / "EBGaramond-SemiBold.ttf")).getBestCmap()
-    return {ch for ch in text if not ch.isspace() and ord(ch) not in cmap}
+    covered = _covered()
+    return {ch for ch in text if not ch.isspace() and ord(ch) not in covered}
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font, width: int) -> list[str]:
