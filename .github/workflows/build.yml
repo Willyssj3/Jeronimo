@@ -6,6 +6,12 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Versión a publicar en Releases (por ejemplo v0.2.0). Vacío: solo compilar."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -38,6 +44,17 @@ jobs:
       - name: Versión
         shell: bash
         run: echo "VERSION=$(python -c 'import traductor; print(traductor.__version__)')" >> "$GITHUB_ENV"
+      - name: Comprobar la versión a publicar
+        if: github.event_name == 'workflow_dispatch' && inputs.publicar != ''
+        shell: bash
+        env:
+          PUBLICAR: ${{ inputs.publicar }}
+        run: |
+          if [ "$PUBLICAR" != "v$VERSION" ]; then
+            echo "Se pidió publicar $PUBLICAR, pero el código es la versión $VERSION."
+            exit 1
+          fi
+          test -f "docs/versiones/$PUBLICAR.md" || { echo "Faltan las notas docs/versiones/$PUBLICAR.md"; exit 1; }
       - name: Construir la app (PyInstaller)
         working-directory: packaging
         run: pyinstaller --noconfirm --distpath ..\dist --workpath ..\build Jeronimo.spec
@@ -58,9 +75,11 @@ jobs:
           name: Jeronimo-Windows
           path: dist/instalador/*
       - name: Publicar versión
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publicar != '')
         uses: softprops/action-gh-release@v2
         with:
-          name: Jerónimo ${{ github.ref_name }}
-          body_path: docs/versiones/${{ github.ref_name }}.md
+          tag_name: ${{ inputs.publicar || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: Jerónimo ${{ inputs.publicar || github.ref_name }}
+          body_path: docs/versiones/${{ inputs.publicar || github.ref_name }}.md
           files: dist/instalador/*
