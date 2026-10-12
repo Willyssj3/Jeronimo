@@ -89,3 +89,17 @@ def test_bridge_reports_errors():
     assert bridge.call("_provider")["ok"] is False
     assert bridge.call("no_existe")["ok"] is False
     assert bridge.call("app_info")["ok"] is True
+
+
+def test_chat_presets_and_manual_prep(api, tmp_path):
+    api.set_provider({"tipo": "manual"})
+    chats = {c["id"]: c for c in api.app_info()["chats"]}
+    assert {"claude", "chatgpt", "gemini", "copilot", "deepseek", "lechat", "otro"} <= set(chats)
+    summary = api.set_settings({"chat_manual": "copilot"})
+    assert summary["chat_manual"] == "copilot" and summary["bloque_manual"] == chats["copilot"]["bloque"]
+    assert api.manual_prep_status() is None
+    st = api.manual_prep_start("analisis")
+    assert st["paso"] == "analisis" and st["total"] == 1
+    assert "[[CHAPTER 0" in api.manual_prep_prompt()["texto"]
+    api.manual_prep_cancel()
+    assert api.manual_prep_status() is None

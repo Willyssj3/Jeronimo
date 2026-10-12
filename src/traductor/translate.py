@@ -25,6 +25,18 @@ from .providers import Provider, RateLimitError, RefusalError
 MANUAL_BLOCKS = {"normal": 6000, "grande": 15000, "muy-grande": 25000}
 DEFAULT_MANUAL_BLOCK = MANUAL_BLOCKS["grande"]
 
+# Chats de IA para el modo manual: nombre y tamaño de bloque recomendado. Son
+# valores prudentes; si un chat corta la respuesta, basta con bajar el tamaño.
+CHAT_PRESETS = {
+    "claude": ("Claude (claude.ai)", 15000),
+    "chatgpt": ("ChatGPT", 12000),
+    "gemini": ("Gemini", 15000),
+    "copilot": ("Microsoft Copilot", 6000),
+    "deepseek": ("DeepSeek", 12000),
+    "lechat": ("Le Chat (Mistral)", 10000),
+    "otro": ("Otro chat o modelo local", 6000),
+}
+
 
 @dataclass
 class Options:

@@ -121,12 +121,33 @@ def translate_user(*, segments: list[tuple[int, str]], glossary: list[dict],
     return "\n\n".join(parts)
 
 
-# En el modo manual la respuesta se copia desde un chat: dentro de un bloque de
-# código se conserva tal cual y el chat ofrece un botón para copiarla entera.
+# En el modo manual el texto se pega en cualquier chat de IA (Claude, ChatGPT,
+# Gemini, Copilot, DeepSeek, Le Chat, un modelo local…) y la respuesta se copia
+# de vuelta: dentro de un bloque de código se conserva tal cual y los chats
+# ofrecen un botón para copiarla entera.
 MANUAL_OUTPUT = """
 
 # Output format
-Write your whole answer inside ONE single code block (```), containing only the <seg> elements and, if needed, the <notes> block. Do not write anything before or after the code block."""
+Write your whole answer inside ONE single code block (```), containing only the <seg> elements and, if needed, the <notes> block. Do not write anything before or after the code block.
+
+# Before answering, check that
+- every input segment appears exactly once in your answer, with the same id, completely translated (no summaries, no omissions, nothing left in the original language);
+- every <gN>…</gN> and <xN/> tag is kept;
+- you followed the glossary, the style guide and the dialogue punctuation.
+If the whole answer does not fit in one message, stop right after a complete </seg>: the missing segments will be sent again."""
+
+MANUAL_ANSWER = """
+
+# Output format
+Write your whole answer inside ONE single code block (```) so it can be copied exactly. Do not write anything before or after the code block."""
+
+
+def strip_code_fences(text: str) -> str:
+    """Contenido del bloque de código más largo de una respuesta de chat (o el texto tal cual)."""
+    blocks = re.findall(r"```[^\n`]*\n(.*?)```", text or "", re.DOTALL)
+    if blocks:
+        return max(blocks, key=len).strip()
+    return (text or "").strip()
 
 
 _SEG_RE = re.compile(r'<seg\s+id\s*=\s*["\']?(\d+)["\']?\s*>(.*?)</seg\s*>', re.DOTALL | re.IGNORECASE)

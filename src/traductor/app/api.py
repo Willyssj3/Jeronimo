@@ -25,7 +25,7 @@ from ..prompts import LANG_NAMES, VARIANTS
 from ..providers import KINDS, ProviderError, config_dir, get_api_key, make_provider, save_api_key
 from ..providers.anthropic_provider import PRICES, SUGGESTED_MODELS, estimate_cost
 from ..providers.base import Usage
-from ..translate import DEFAULT_MANUAL_BLOCK, Options, Translator, pseudo_slots
+from ..translate import CHAT_PRESETS, DEFAULT_MANUAL_BLOCK, Options, Translator, pseudo_slots
 
 LOCAL_KINDS = {"ollama", "lmstudio", "manual"}
 
@@ -140,6 +140,7 @@ class Api:
             "idiomas": {k: v[1] for k, v in LANG_NAMES.items()},
             "variantes": list(VARIANTS),
             "modelos_claude": SUGGESTED_MODELS,
+            "chats": [{"id": k, "nombre": v[0], "bloque": v[1]} for k, v in CHAT_PRESETS.items()],
             "carpeta_por_defecto": str(default_projects_dir()),
             "recientes": [dict(r, existe=(Path(r["carpeta"]) / "proyecto.json").exists())
                           for r in self._settings().get("recientes", [])],
@@ -258,6 +259,14 @@ class Api:
         for key in ("nombre", "variante", "titulo_traducido", "revision", "idioma_destino"):
             if key in values:
                 p.config[key] = values[key]
+        if "chat_manual" in values:
+            chat = values["chat_manual"]
+            if chat not in CHAT_PRESETS:
+                raise ValueError("Chat desconocido.")
+            opts = p.config.setdefault("opciones", {})
+            opts["chat_manual"] = chat
+            if "bloque_manual" not in values:
+                opts["bloque_manual"] = CHAT_PRESETS[chat][1]
         if "bloque_manual" in values:
             size = int(values["bloque_manual"])
             if not 1000 <= size <= 60000:
@@ -287,6 +296,7 @@ class Api:
             "titulo_traducido": cfg.get("titulo_traducido", ""),
             "revision": cfg.get("revision", "capitulo"),
             "bloque_manual": (cfg.get("opciones") or {}).get("bloque_manual") or DEFAULT_MANUAL_BLOCK,
+            "chat_manual": (cfg.get("opciones") or {}).get("chat_manual") or "claude",
             "proveedor": prov,
             "tiene_clave": kind in LOCAL_KINDS or bool(get_api_key(kind)),
             "capitulos": [asdict(c) for c in chapters],
@@ -582,6 +592,29 @@ class Api:
             raise ValueError("No encontré párrafos traducidos en lo que pegaste. Copia la respuesta completa "
                              "(en claude.ai, con el botón «Copiar» del bloque de código).")
         return dict({"guardados": saved, "faltan": missing}, **self._manual_state(translator, index))
+
+    # -- preparación en modo manual (copiar y pegar en cualquier chat) ----------
+
+    def _manual_prep(self):
+        return knowledge.ManualPrep(self._need_project())
+
+    def manual_prep_status(self) -> dict | None:
+        return self._manual_prep().status()
+
+    def manual_prep_start(self, step: str) -> dict:
+        if self._tasks.state["activa"]:
+            raise ValueError("Espera a que termine la tarea en curso.")
+        return self._manual_prep().start(step)
+
+    def manual_prep_prompt(self) -> dict:
+        return self._manual_prep().prompt()
+
+    def manual_prep_import(self, text: str) -> dict:
+        return self._manual_prep().import_response(text)
+
+    def manual_prep_cancel(self) -> bool:
+        self._manual_prep().cancel()
+        return True
 
     # -- exportación -----------------------------------------------------------
 

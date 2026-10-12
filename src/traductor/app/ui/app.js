@@ -489,7 +489,7 @@ const PROVIDER_HELP = {
   ollama: "Gratis y en tu PC. Instala Ollama (ollama.com), descarga un modelo grande (desde la terminal: ollama pull nombre-del-modelo) y pulsa «Cargar modelos». Necesitas una tarjeta gráfica con bastante memoria; la calidad es menor que en la nube.",
   lmstudio: "Gratis y en tu PC. En LM Studio, carga un modelo y activa el servidor local (puerto 1234). Luego pulsa «Cargar modelos».",
   compatible: "Cualquier servicio compatible con la API de OpenAI: indica la dirección (suele terminar en /v1) y la clave si hace falta.",
-  manual: "Sin clave de API: en la revisión de cada capítulo pulsa «Copiar bloque», pégalo en el chat de tu IA (claude.ai, ChatGPT, Gemini…), copia la respuesta completa y pégala en la app. Es más lento, pero funciona con cualquier IA. La preparación automática de estilo y glosario no está disponible en este modo: puedes editarlos a mano.",
+  manual: "Sin clave de API y con cualquier IA: Claude, ChatGPT, Gemini, Copilot, DeepSeek, Le Chat o un modelo en tu PC. La app copia cada bloque con todo el contexto que hace falta (guía de estilo, glosario, ejemplos oficiales, resumen del capítulo y párrafos anteriores), tú lo pegas en el chat y luego pegas la respuesta. La preparación de la guía, el glosario y el análisis del libro también se hace así, desde «Estilo y glosario → Generar con IA».",
 };
 
 function renderAI(v) {
@@ -615,11 +615,15 @@ async function renderKnowledge(v) {
         ["analisis", "Análisis del libro", "Lee el libro entero: sinopsis, resumen de cada capítulo y lista de personajes y términos.", true],
         ["terminos", "Proponer términos", "Propone cómo traducir los términos del libro que aún no están en el glosario.", true],
       ];
-      body.append(manual ? h("div", { class: "warn" }, "En modo manual no se puede generar automáticamente: escribe la guía y el glosario a mano o elige una IA con clave.") : null,
+      if (manual) {
+        body.append(manualPrepPanel(checks));
+        return;
+      }
+      body.append(
         h("div", { class: "card" }, checks.map(([id, title, desc, enabled]) => h("label", { class: "row", style: "font-weight:500;align-items:flex-start;padding:6px 0" },
-          h("input", { type: "checkbox", value: id, class: "prep", checked: enabled && !manual && !(id === "estilo" && k.estilo), disabled: !enabled || manual }),
+          h("input", { type: "checkbox", value: id, class: "prep", checked: enabled && !(id === "estilo" && k.estilo), disabled: !enabled }),
           h("span", {}, h("strong", {}, title), h("br"), h("span", { class: "muted small" }, enabled ? desc : "Necesita al menos un libro de referencia."))))),
-        h("div", { class: "row end" }, h("button", { disabled: manual, onclick: () => {
+        h("div", { class: "row end" }, h("button", { onclick: () => {
           const steps = [...document.querySelectorAll("input.prep:checked")].map((c) => c.value);
           if (!steps.length) return toast("Marca al menos un paso.", true);
           startTask(() => rpc("prepare", steps));
@@ -631,6 +635,67 @@ async function renderKnowledge(v) {
   v.append(h("h1", {}, "Estilo y glosario"),
     h("p", { class: "lead" }, "Todo lo que la IA sabe del libro y del estilo que debe imitar. Revisa y corrige lo que quieras: tus cambios mandan."),
     tabs, body);
+}
+
+function manualPrepPanel(checks) {
+  const box = h("div", {});
+  const draw = async () => {
+    box.textContent = "";
+    const st = await guard(() => rpc("manual_prep_status"));
+    if (st === undefined) return;
+    if (!st) {
+      box.append(
+        h("p", {}, "Modo manual: cada paso genera unas instrucciones con todo el contexto necesario. Las copias en tu chat de IA (Claude, ChatGPT, Gemini, Copilot…), y pegas aquí la respuesta. Hazlos en este orden:"),
+        h("div", { class: "card" }, checks.map(([id, title, desc, enabled], i) => h("div", { class: "row", style: "padding:8px 0;border-bottom:1px solid var(--border)" },
+          h("div", { style: "flex:1" }, h("strong", {}, `${i + 1}. ${title}`), h("br"), h("span", { class: "muted small" }, enabled ? desc : "Necesita al menos un libro de referencia.")),
+          h("button", { class: "small", disabled: !enabled, onclick: async () => {
+            if (await guard(() => rpc("manual_prep_start", id))) draw();
+          } }, "Empezar")))));
+      return;
+    }
+    const out = h("textarea", { placeholder: "Pega aquí la respuesta completa del chat (el bloque de código entero)." });
+    const info = h("p", { class: "muted small", style: "margin:0" });
+    const copy = async () => {
+      const p = await guard(() => rpc("manual_prep_prompt"));
+      if (!p) return;
+      info.textContent = `Copiado: ${p.etiqueta} (${fmt(p.caracteres)} caracteres).`;
+      if (await copyText(p.texto)) toast("Instrucciones copiadas. Pégalas en tu chat de IA.");
+      else {
+        const ta = h("textarea", { class: "big" });
+        ta.value = p.texto;
+        await modal(h("div", {}, h("p", {}, "Selecciona y copia este texto:"), ta), { ok: "Cerrar", cancel: null });
+      }
+    };
+    const doImport = async (thenCopy) => {
+      if (!out.value.trim()) return toast("Pega primero la respuesta del chat.", true);
+      const r = await guard(() => rpc("manual_prep_import", out.value));
+      if (!r) return;
+      if (r.terminado) {
+        toast(`${r.nombre}: listo.`);
+        state.summary = await rpc("project_summary");
+        render();
+        return;
+      }
+      toast(`Parte ${r.hechos} de ${r.total} importada.`);
+      await draw();
+      if (thenCopy) await copy();
+    };
+    box.append(h("div", { class: "card manual stack" },
+      h("h3", { style: "margin-top:0" }, `${st.nombre}: parte ${st.hechos + 1} de ${st.total}`),
+      h("p", { class: "muted small", style: "margin:0" }, st.etiqueta),
+      h("div", { class: "row" }, h("button", { onclick: copy }, "Copiar instrucciones"), info),
+      out,
+      h("div", { class: "row" },
+        h("button", { class: "ghost danger-text", onclick: async () => {
+          if (!(await modal("¿Cancelar este paso? Lo ya importado se conserva.", { ok: "Cancelar paso" }))) return;
+          if (await guard(() => rpc("manual_prep_cancel"))) draw();
+        } }, "Cancelar paso"),
+        h("div", { class: "spacer" }),
+        h("button", { class: "ghost", onclick: () => doImport(false) }, "Solo importar"),
+        h("button", { onclick: () => doImport(true) }, "Importar y copiar la siguiente"))));
+  };
+  draw();
+  return box;
 }
 
 function glossaryEditor(k) {
@@ -832,10 +897,14 @@ function manualPanel(index) {
   const out = h("textarea", { placeholder: "Pega aquí la respuesta completa de la IA (con las marcas <seg id=\"…\">)." });
   const info = h("p", { class: "muted small", style: "margin:0" });
   const counter = h("strong", {}, "…");
+  const chatSel = h("select", { style: "width:auto", onchange: async (e) => {
+    const sum = await guard(() => rpc("set_settings", { chat_manual: e.target.value }));
+    if (sum) { state.summary = sum; sizeSel.value = String(sum.bloque_manual); refreshCounter(); }
+  } }, (state.info.chats || []).map((c) => h("option", { value: c.id, selected: (state.summary.chat_manual || "claude") === c.id }, c.nombre)));
   const sizeSel = h("select", { style: "width:auto", onchange: async (e) => {
     const sum = await guard(() => rpc("set_settings", { bloque_manual: Number(e.target.value) }));
     if (sum) { state.summary = sum; refreshCounter(); }
-  } }, [[6000, "Normal (6.000 caracteres)"], [15000, "Grande (15.000, recomendado)"], [25000, "Muy grande (25.000)"]].map(([v, label]) =>
+  } }, [[6000, "6.000 caracteres"], [10000, "10.000 caracteres"], [12000, "12.000 caracteres"], [15000, "15.000 caracteres"], [25000, "25.000 caracteres"]].map(([v, label]) =>
     h("option", { value: v, selected: (state.summary.bloque_manual || 15000) === v }, label)));
 
   const refreshCounter = async () => {
@@ -880,12 +949,13 @@ function manualPanel(index) {
   };
 
   const panel = h("div", { id: "manual-panel", class: "card manual stack", hidden: state.summary.proveedor.tipo !== "manual" },
-    h("h3", { style: "margin-top:0" }, "Modo manual: usa tu plan de claude.ai"),
-    h("div", { class: "row" }, counter, h("div", { class: "spacer" }), h("label", { style: "margin:0" }, "Tamaño del bloque"), sizeSel),
+    h("h3", { style: "margin-top:0" }, "Modo manual: con cualquier chat de IA"),
+    h("div", { class: "row" }, counter, h("div", { class: "spacer" }),
+      h("label", { style: "margin:0" }, "Chat"), chatSel, h("label", { style: "margin:0" }, "Bloque"), sizeSel),
     h("ol", { class: "small", style: "margin:0;padding-left:1.2em;line-height:1.6" },
-      h("li", {}, "Pulsa «Copiar bloque» y pégalo en un chat de claude.ai (puedes usar el mismo chat para todo el capítulo)."),
-      h("li", {}, "Cuando Claude termine, usa el botón «Copiar» del bloque de código de su respuesta."),
-      h("li", {}, "Pégala aquí y pulsa «Importar y copiar el siguiente»: la app guarda la traducción y ya te deja el próximo bloque copiado.")),
+      h("li", {}, "Pulsa «Copiar bloque» y pégalo en tu chat de IA. Cada bloque lleva todo el contexto: guía de estilo, glosario, ejemplos oficiales, resumen del capítulo y los párrafos anteriores; puedes usar el mismo chat o uno nuevo."),
+      h("li", {}, "Cuando termine, copia la respuesta con el botón de copiar del bloque de código (o selecciona todo su texto)."),
+      h("li", {}, "Pégala aquí y pulsa «Importar y copiar el siguiente». Si la respuesta llegó cortada, importa igual: lo que falte vuelve en el siguiente bloque. Si se corta a menudo, baja el tamaño del bloque.")),
     h("div", { class: "row" }, h("button", { onclick: copyNext }, "Copiar bloque"), info),
     out,
     h("div", { class: "row end" },

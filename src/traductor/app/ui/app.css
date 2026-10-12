@@ -120,6 +120,7 @@ button.ghost { background: transparent; color: var(--accent); }
 button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 button.small { padding: 4px 10px; font-size: .85rem; }
 button.link { background: none; border: none; color: var(--accent); padding: 0; text-decoration: underline; }
+button.danger-text { color: var(--danger); border-color: var(--danger); }
 
 .badge {
   display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 600;

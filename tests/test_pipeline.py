@@ -196,3 +196,50 @@ def test_titles_only_block_has_no_examples(project):
     assert "# Reference examples" not in user
     user = tr.build_user(data, data["segmentos"][1:3])
     assert "# Reference examples" in user
+
+
+def test_manual_preparation_any_chat(project):
+    from traductor.knowledge import ManualPrep
+
+    prep = ManualPrep(project)
+    st = prep.start("estilo")
+    assert st == {"paso": "estilo", "nombre": "Guía de estilo", "hechos": 0, "total": 1,
+                  "etiqueta": st["etiqueta"], "terminado": False}
+    prompt = prep.prompt()
+    assert "Mirela remendaba las redes" in prompt["texto"] and "ONE single code block" in prompt["texto"]
+    with pytest.raises(ValueError):
+        prep.import_response("sin nada útil")
+    done = prep.import_response("```markdown\n## Guía\n- Diálogos con raya.\n- Tuteo entre amigos y familiares.\n```")
+    assert done["terminado"] and prep.status() is None
+    assert project.style_guide().startswith("## Guía") and "```" not in project.style_guide()
+
+    # Una referencia con nombres repetidos en mitad de la frase (candidatos al glosario).
+    folder = project.root.parent
+    make_epub(folder / "ref2_en.epub", [("Two", "".join(
+        f"<p>At dawn Mirela and Tobias walked to the harbor number {k}.</p>" for k in range(4)))], title="Dawn")
+    make_epub(folder / "ref2_es.epub", [("Dos", "".join(
+        f"<p>Al alba Mirela y Tobias caminaron hasta el puerto número {k}.</p>" for k in range(4)))], lang="es", title="Alba")
+    project.add_reference(folder / "ref2_en.epub", folder / "ref2_es.epub", name="Dawn")
+    st = prep.start("glosario")
+    assert "Mirela" in prep.prompt()["texto"]
+    prep.import_response('```json\n{"term": "Mirela", "translation": "Mirela", "type": "persona", "note": "pescadora"}\n```')
+    assert any(e["termino"] == "Mirela" and e["origen"] == "oficial" for e in project.glossary())
+
+    # Análisis en dos partes: al final se pide una sinopsis que une ambas.
+    st = prep.start("analisis", analysis_budget=200)
+    assert st["total"] >= 2
+    for k in range(st["total"]):
+        r = prep.import_response('```json\n{"summary": "Parte %d.", "chapters": [{"id": "0", "summary": "Resumen %d."}], '
+                                 '"terms": [{"term": "Harrowgate", "type": "lugar", "note": "puerto"}]}\n```' % (k, k))
+    assert not r["terminado"] and "sinopsis" in r["etiqueta"]
+    assert "Parte 0." in prep.prompt()["texto"]
+    r = prep.import_response("```\nUna pescadora, un farero y un puerto envuelto en niebla.\n```")
+    assert r["terminado"]
+    bible = project.bible()
+    assert bible["sinopsis"].startswith("Una pescadora") and bible["capitulos"]["0"].startswith("Resumen 0.")
+
+    prep.start("terminos")
+    prep.import_response('{"term": "Harrowgate", "translation": "Puertoarado", "note": "nombre parlante"}')
+    assert {e["termino"]: e for e in project.glossary()}["Harrowgate"]["origen"] == "propuesta"
+    with pytest.raises(ValueError):
+        prep.prompt()  # no queda nada en curso
