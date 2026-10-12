@@ -1,4 +1,4 @@
 """Jerónimo (Traductor de Libros): traducción de EPUB con IA que imita el
 estilo de las traducciones oficiales del autor."""
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

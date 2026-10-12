@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="68" viewBox="0 0 380 68" role="img" aria-label="Descargar Jerónimo para Windows">
+  <title>Descargar Jerónimo para Windows</title>
+  <defs>
+    <linearGradient id="oro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ecc56c"/>
+      <stop offset="1" stop-color="#cf9b3c"/>
+    </linearGradient>
+  </defs>
+  <rect x="1.5" y="1.5" width="377" height="65" rx="16" fill="url(#oro)" stroke="#9c711f" stroke-width="1.5"/>
+  <g fill="none" stroke="#132840" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(26 17)">
+    <path d="M17 3v20"/>
+    <path d="M8 15l9 9 9-9"/>
+    <path d="M4 31h26"/>
+  </g>
+  <text x="76" y="33" font-family="Segoe UI, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" font-weight="700" fill="#132840">Descargar para Windows</text>
+  <text x="76" y="53" font-family="Segoe UI, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" fill="#26405f">Gratis · sin instalar · Windows 10 y 11</text>
+</svg>

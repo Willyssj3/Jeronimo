@@ -301,19 +301,29 @@ await page.waitForSelector("#modal-backdrop:not([hidden])");
 await shot("35-modal-perfiles");
 await page.click("#modal-ok");
 await page.waitForSelector("#new-epub");
-await page.evaluate(async () => {
-  const real = window.rpc;
-  window.rpc = (name, ...args) => (name === "check_update"
-    ? Promise.resolve({ version: "9.9.9", url: "https://github.com/Willyssj3/TraductordeLibros/releases", notas: "## v9.9.9\n- …" })
-    : real(name, ...args));
-  await checkUpdate();
-  window.rpc = real;
-});
-await shot("36-aviso-version-nueva");
-await page.click("#btn-update");
+// Versión nueva y avisos al abrir, simulados. El aviso de versión nueva se abre solo y espera
+// una respuesta: por eso no se espera a checkUpdate() ni a startupNotices().
+const fakes = {
+  check_update: { version: "9.9.9", url: "https://github.com/Willyssj3/Jeronimo/releases", notas: "## v9.9.9\n- …", auto: true },
+  startup_notices: { actualizado_a: "9.9.9", ofrecer_accesos: true },
+  create_shortcuts: [],
+};
+await page.evaluate((fakes) => {
+  window.realRpc = window.rpc;
+  window.rpc = (name, ...args) => (name in fakes ? Promise.resolve(fakes[name]) : window.realRpc(name, ...args));
+  checkUpdate();
+}, fakes);
 await page.waitForSelector("#modal-backdrop:not([hidden])");
-await shot("37-modal-version-nueva");
+await shot("36-modal-version-nueva");
 await page.click("#modal-cancel");
+await page.waitForSelector("#modal-backdrop", { state: "hidden" });
+await shot("37-aviso-version-nueva");
+await page.evaluate(() => { startupNotices(); });
+await page.waitForSelector("#modal-backdrop:not([hidden])");
+await shot("37b-modal-accesos-directos");
+await page.click("#modal-cancel");
+await page.waitForSelector("#modal-backdrop", { state: "hidden" });
+await page.evaluate(() => { window.rpc = window.realRpc; });
 await page.click("#btn-quit");
 await page.waitForSelector("#modal-backdrop:not([hidden])");
 await shot("38-modal-salir");

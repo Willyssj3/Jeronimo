@@ -68,6 +68,10 @@ convertir MOBI/AZW3.
   ui_idiomas_test.mjs 8765 en`), busca los botones por su texto traducido y avisa de textos de la
   interfaz que sigan en español (lista en `pruebas-ui/ui_idiomas_test-en/textos-a-revisar.txt`).
   Córrela en `en` y `pt` cada vez que agregues textos o pantallas.
+- `python tools/capturas_readme.py`: rehace las capturas del README (`docs/capturas/`) con un
+  cuento inventado («The Salt Keeper», traducción escrita a mano) y rutas de ejemplo
+  (`C:\Users\Lector`). Úsalo cuando cambie el aspecto de la app; revisa las imágenes antes de
+  subirlas.
 
 ## Arquitectura
 
@@ -153,15 +157,23 @@ editables, exportar a Word y PDF, convertir desde Word/TXT/FB2/MOBI/AZW3, OCR pa
 modo manual con elección de modelo y plan, borrar la traducción de un capítulo, la interfaz
 completa en inglés y portugués (verificada pantalla por pantalla el 12/10/2026) y la descarga
 portable con actualización automática, instalación de lo que falta (con permiso) y accesos
-directos.
+directos, y la página final «Traducido con Jerónimo» al exportar (`credit.py`; activada por
+defecto, se quita en «Exportar»). El README ya es la presentación para compartir (botón de
+descarga directa `docs/boton-descargar.svg`, capturas de `docs/capturas/`, preguntas frecuentes);
+el usuario eligió solo el README, sin página web aparte.
 
 Pendiente, en este orden (lo fijó el usuario):
-1. **Actualizar el README** como presentación para compartir (botón grande de descarga directa,
-   capturas actuales con libros inventados, funciones nuevas, preguntas frecuentes). Ya explica
-   cómo cambiar el idioma. El usuario eligió solo el README, sin página web aparte.
-2. **Preparar la versión 0.3.0** (número y notas en `docs/versiones/v0.3.0.md`) y preguntarle al
-   usuario antes de publicarla (ver «Publicar una versión»). Es la primera con `Jeronimo-Windows.zip`
-   y actualización automática: quien tenga la 0.2.0 recibe el aviso de siempre y baja el ZIP a mano.
+1. **Publicar la 0.3.0**: el número ya está en `__init__.py` y las notas en
+   `docs/versiones/v0.3.0.md`; falta que el usuario dé el OK (ver «Publicar una versión»). Es la
+   primera con `Jeronimo-Windows.zip` y actualización automática: quien tenga la 0.2.0 recibe el
+   aviso de siempre y baja el ZIP a mano. El botón del README apunta a
+   `releases/latest/download/Jeronimo-Windows.zip`, que da error hasta que exista esa versión.
+2. **Versión 0.4.0** (lo eligió el usuario): (a) al crear el proyecto, dar ya las instrucciones para
+   armarlo en el chat de IA que use, con la guía de estilo y el glosario; (b) revisión final del
+   libro completo, que busque errores e incongruencias usando las notas que quedan en cada
+   capítulo; (c) lector de audiolibros: voces neuronales gratis que funcionan en la PC (se
+   descargan una vez, pidiendo permiso; el texto no sale de la PC), voces distintas por personaje
+   (con IA; sin IA, al menos narrador y diálogos) y exportar a MP3.
 3. **Corregir los avisos de calidad con un clic** (después de la 0.3.0; el usuario eligió el
    diseño): botón «Corregir» en cada aviso y uno para todos los de un tipo. Lo mecánico (espacios,
    signos ¿ ¡, guion → raya, nombres con dos grafías) se corrige al instante y se puede deshacer;
