@@ -22,6 +22,12 @@ capítulo, personajes) para mantener la coherencia, conserva el formato del
 EPUB (cursivas, notas al pie, imágenes, índice) y permite revisar y aprobar
 **capítulo por capítulo**.
 
+Funciona con la IA que cada persona tenga: con una clave de API (Claude,
+Gemini, OpenAI…), con un modelo gratuito en el propio PC o, sin clave
+ninguna, en **modo manual**, copiando y pegando en cualquier chat de IA.
+
+<p align="center"><img src="docs/captura-revision.png" alt="Revisión de un capítulo: original y traducción lado a lado" width="880"></p>
+
 > ⚠️ Usa la app solo con libros que tengas derecho a traducir (obras propias,
 > de dominio público o con permiso del autor/editorial). Los EPUB nunca se
 > suben a este repositorio.
@@ -45,14 +51,40 @@ La app usa el componente WebView2 de Microsoft Edge, incluido en Windows 10 y
 2. **Referencias**: añade otros libros del autor con su traducción oficial
    (original + traducción). La app los empareja y muestra la calidad.
 3. **Inteligencia artificial**: elige tu IA y pega tu clave (se guarda en el
-   almacén seguro de Windows). Puedes probar la conexión y ver el coste estimado.
+   almacén seguro de Windows). Puedes probar la conexión y ver el coste
+   estimado. Si no tienes clave, elige el **modo manual** (ver abajo).
 4. **Estilo y glosario**: genera con IA la guía de estilo, el glosario oficial
-   y el análisis del libro; revisa y corrige lo que quieras.
+   y el análisis del libro; revisa y corrige lo que quieras. En modo manual,
+   cada paso se hace copiando y pegando en tu chat.
 5. **Capítulos**: traduce el siguiente capítulo, revísalo lado a lado (puedes
    editar cada párrafo o pedir que se retraduzca) y apruébalo. Lo aprobado sirve
    de ejemplo para los capítulos siguientes. Puedes omitir páginas que no
    quieras traducir (créditos, publicidad…).
 6. **Exportar**: genera el EPUB traducido o una edición bilingüe.
+
+<p align="center"><img src="docs/captura-inicio.png" alt="Pantalla de inicio de Jerónimo" width="880"></p>
+
+## Modo manual: con cualquier chat de IA, sin clave de API
+
+Si no puedes o no quieres conectar una API, Jerónimo funciona igual con el
+chat de IA que ya uses: **Claude (claude.ai, incluido el plan Pro o Max),
+ChatGPT, Gemini, Copilot, DeepSeek, Le Chat** o un modelo en tu PC.
+
+1. En **Inteligencia artificial**, elige «Modo manual».
+2. En **Estilo y glosario → Generar con IA**, haz los pasos en orden (guía de
+   estilo, glosario oficial, análisis del libro y propuesta de términos):
+   «Copiar instrucciones», pégalas en el chat y pega aquí su respuesta.
+3. En cada capítulo, elige tu chat y el tamaño del bloque, pulsa
+   **«Copiar bloque»**, pégalo en el chat y luego pega la respuesta con
+   **«Importar y copiar el siguiente»**.
+
+Cada bloque lleva **todo el contexto que la IA necesita** para traducir como
+el traductor oficial: la guía de estilo, el glosario de los términos que
+aparecen, pasajes parecidos de las traducciones oficiales como ejemplo, el
+resumen del capítulo, los párrafos anteriores ya traducidos y unas
+instrucciones precisas de formato. Así no importa si usas el mismo chat o uno
+nuevo para cada bloque. La respuesta llega en un bloque de código fácil de
+copiar; si se corta, lo que falte vuelve en el siguiente bloque.
 
 ## Convertir PDF a EPUB
 
@@ -82,7 +114,7 @@ Cada persona usa su propia IA:
 | **Google Gemini** | Tiene nivel gratuito | Clave gratis en Google AI Studio, con límites de uso. |
 | **OpenAI**, **OpenRouter**, **DeepSeek** | Pago por uso | Cualquier servicio compatible con la API de OpenAI. |
 | **Ollama**, **LM Studio** | Gratis | Modelos que funcionan en tu propio PC (calidad menor; requiere buena tarjeta gráfica). |
-| **Modo manual** | Incluido en tu plan | Usa tu plan de claude.ai (Pro/Max) u otro chat: la app copia cada bloque con sus instrucciones, lo pegas en el chat y luego pegas la respuesta. Bloques de 6.000 a 25.000 caracteres y botón «Importar y copiar el siguiente» para ir rápido. |
+| **Modo manual** | Incluido en tu plan | Con cualquier chat de IA, sin clave: Claude (también con el plan Pro/Max de claude.ai), ChatGPT, Gemini, Copilot, DeepSeek, Le Chat u otro. La app copia cada bloque con todo su contexto, lo pegas en el chat y luego pegas la respuesta. Bloques de 6.000 a 25.000 caracteres y botón «Importar y copiar el siguiente» para ir rápido. |
 
 ## Línea de comandos
 
@@ -135,5 +167,6 @@ publica automáticamente en *Releases*.
 
 ## Licencia
 
-[MIT](LICENSE). La «J» del logo está trazada con la tipografía EB Garamond
-(SIL Open Font License 1.1).
+[MIT](LICENSE). La «J» del logo está trazada con la tipografía EB Garamond,
+que la interfaz también usa (incluida en `src/traductor/app/ui/fonts/` bajo la
+SIL Open Font License 1.1, con su texto de licencia).

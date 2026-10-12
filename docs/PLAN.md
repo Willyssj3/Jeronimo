@@ -79,14 +79,17 @@ el coste estimado.
    - Revisión lado a lado con formato visible, edición, retraducción de un
      párrafo, notas y avisos de la IA, aprobación, modo manual.
    - Exportación a EPUB traducido o bilingüe.
+   - Diseño propio con la estética del logo (azul tinta, dorado, papel
+     crema y EB Garamond), con modo oscuro.
 3. ✅ **Instalador de Windows** generado con GitHub Actions (PyInstaller +
    Inno Setup) y publicado en *Releases* al crear una etiqueta `v*`.
 4. **Mejoras pendientes**:
-   - Probar el instalador en equipos reales y añadir icono propio.
+   - Probar el instalador en equipos reales. ✅ Nombre (Jerónimo) y logo propios.
    - Emparejamiento con *embeddings* multilingües (opcional, vía Ollama o API)
      para libros con estructura muy distinta.
    - Pasada de revisión por una segunda IA (consistencia y glosario).
-   - Preparación del conocimiento en modo manual (copiar/pegar).
+   - ✅ Modo manual con cualquier chat de IA, también para preparar la guía
+     de estilo, el glosario y el análisis del libro.
    - Traducción del texto alternativo de imágenes.
    - ✅ Conversión de PDF con texto a EPUB (`pdf2epub.py`).
    - OCR para PDF escaneados; más formatos de entrada (DOCX, TXT) y salida (DOCX, PDF).
