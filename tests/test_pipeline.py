@@ -14,6 +14,7 @@ from traductor.providers.base import Completion, Provider, RefusalError, Usage
 from traductor.translate import Translator
 
 SEG_RE = re.compile(r'<seg id="(\d+)">(.*?)</seg>', re.DOTALL)
+REVIEW_RE = re.compile(r'<seg id="(\d+)"><source>(.*?)</source><translation>(.*?)</translation></seg>', re.DOTALL)
 
 
 class FakeAI(Provider):
@@ -46,6 +47,14 @@ class FakeAI(Provider):
         if "decide how to render each term" in user:
             return Completion('{"term": "Harrowgate", "translation": "Puertoarado", "note": "nombre parlante"}',
                               usage, self.model)
+        if "# Segments to review" in user:
+            # Revisor simulado: corrige «HARROWGATE» según el glosario.
+            fixes = []
+            for n, _src, tgt in REVIEW_RE.findall(user.split("# Segments to review", 1)[1]):
+                if "HARROWGATE" in tgt:
+                    fixes.append(f'<fix id="{n}"><text>{tgt.replace("HARROWGATE", "PUERTOARADO")}</text>'
+                                 f'<why>Glosario: Harrowgate es Puertoarado.</why></fix>')
+            return Completion("\n".join(fixes) or "<nofixes/>", usage, self.model)
         segments = SEG_RE.findall(user.split("# Segments to translate", 1)[1])
         if self.refuse and any(int(n) == self.refuse for n, _ in segments):
             raise RefusalError("no")

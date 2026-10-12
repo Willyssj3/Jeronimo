@@ -254,7 +254,8 @@ class Project:
         write_json(self._deleted_path(index), data)
         for seg in data["segmentos"]:
             seg.update(tgt=None, avisos=[], nota=None, editado=False)
-            seg.pop("qa_ignorar", None)
+            for key in ("qa_ignorar", "sugerencia", "revisado_ia"):
+                seg.pop(key, None)
         data["aprobado"] = False
         self.save_chapter(data)
         return done

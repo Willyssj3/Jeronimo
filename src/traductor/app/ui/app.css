@@ -449,6 +449,7 @@ details > summary::marker { color: var(--gold); }
   background: var(--paper); border-bottom: 1px solid var(--border-strong);
 }
 .review-head h1 { font-size: 1.85rem; }
+.tools-row { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
 .seg-cols {
   display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px; padding-bottom: 8px;
   font-size: .66rem; font-weight: 700; letter-spacing: .17em; text-transform: uppercase; color: var(--muted);
@@ -555,6 +556,15 @@ button.link.inline { font-family: inherit; font-size: inherit; font-weight: 600;
   display: inline; margin: 0 0 0 1px; padding: 0; background: none; color: var(--gold);
   font-family: var(--serif); font-size: .62em; font-weight: 600; vertical-align: super; line-height: 0;
 }
+
+.suggestion {
+  grid-column: 1 / -1; padding: 12px 18px 14px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--gold-wash); border-top: 1px dashed var(--gold-line);
+}
+.diff { font-family: var(--serif); font-size: 1.14rem; line-height: 1.6; color: var(--text); }
+.diff del, .diff ins { text-decoration: none; border-radius: 3px; padding: 0 1px; }
+.d-del { background: var(--danger-soft); color: var(--danger); text-decoration: line-through !important; text-decoration-thickness: 1px !important; }
+.d-ins { background: var(--ok-soft); color: var(--ok); }
 
 .card.manual { border-top: 3px solid var(--gold-bright); background: linear-gradient(180deg, var(--gold-wash), var(--card) 140px); }
 .manual textarea { min-height: 160px; font-family: var(--mono); font-size: .84rem; }

@@ -1109,13 +1109,15 @@ async function renderReview(v) {
   const filterSel = h("select", { style: "width:auto", onchange: (e) => { reviewFilter = e.target.value; drawRows(); } },
     h("option", { value: "todos", selected: reviewFilter === "todos" }, "Todos los párrafos"),
     h("option", { value: "avisos", selected: reviewFilter === "avisos" }, "Con avisos o notas"),
-    h("option", { value: "pendientes", selected: reviewFilter === "pendientes" }, "Sin traducir"));
+    h("option", { value: "pendientes", selected: reviewFilter === "pendientes" }, "Sin traducir"),
+    h("option", { value: "sugerencias", selected: reviewFilter === "sugerencias" }, "Con sugerencias de revisión"));
 
   const rows = h("div", {});
   const drawRows = () => {
     rows.textContent = "";
     const segs = data.segmentos.filter((s) => reviewFilter === "todos" ||
-      (reviewFilter === "pendientes" ? !s.tgt : (s.avisos.length || s.nota || qaBySeg[s.n])));
+      (reviewFilter === "pendientes" ? !s.tgt : reviewFilter === "sugerencias" ? s.sugerencia
+        : (s.avisos.length || s.nota || qaBySeg[s.n])));
     if (!segs.length) rows.appendChild(h("div", { class: "card empty-state" }, "No hay párrafos con este filtro."));
     segs.forEach((s) => rows.appendChild(segmentRow(data, s, qaBySeg[s.n] || [])));
   };
@@ -1133,9 +1135,6 @@ async function renderReview(v) {
         h("span", { class: "muted" }, `${data.hechos} de ${data.total} párrafos traducidos`),
         h("div", { class: "spacer" }),
         filterSel,
-        !manualMode && data.hechos < data.total && !data.omitir ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", index)) }, "Traducir lo pendiente") : null,
-        h("button", { class: "small ghost", title: "Leer el capítulo como en el lector y escucharlo en voz alta", onclick: () => go("lectura", index) }, svgIcon("libro"), "Leer y escuchar"),
-        h("button", { class: "small ghost", onclick: () => { const p = $("#manual-panel"); p.hidden = !p.hidden; } }, "Modo manual"),
         h("button", { class: "small " + (approved ? "ghost" : "gold"), disabled: data.hechos < data.total || data.bloqueado, onclick: async () => {
           const d = await guard(() => rpc("set_approved", index, !approved));
           if (!d) return;
@@ -1143,9 +1142,19 @@ async function renderReview(v) {
           if (!approved) toast("Capítulo aprobado. Sus párrafos servirán de ejemplo para los siguientes.");
           render();
         } }, approved ? "Quitar aprobación" : "Aprobar capítulo"),
-        data.hechos ? h("button", { class: "small ghost danger-text", disabled: data.bloqueado, title: "Borrar toda la traducción de este capítulo",
-          onclick: () => clearChapter(index, data.titulo, data.hechos) }, svgIcon("papelera"), "Borrar traducción") : null,
         next ? h("button", { class: "small ghost", onclick: () => go("revision", next.index) }, "Siguiente ›") : null),
+      h("div", { class: "row tools-row" },
+        !manualMode && data.hechos < data.total && !data.omitir ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", index)) }, "Traducir lo pendiente") : null,
+        h("button", { class: "small ghost", onclick: () => { const p = $("#manual-panel"); p.hidden = !p.hidden; } }, "Modo manual"),
+        data.hechos ? h("button", { class: "small ghost", title: "Una IA relee la traducción y propone correcciones", onclick: () => {
+          const p = $("#review-panel");
+          p.hidden = !p.hidden;
+          state.reviewOpen = !p.hidden;
+        } }, "Revisión con IA") : null,
+        h("button", { class: "small ghost", title: "Leer el capítulo como en el lector y escucharlo en voz alta", onclick: () => go("lectura", index) }, svgIcon("libro"), "Leer y escuchar"),
+        h("div", { class: "spacer" }),
+        data.hechos ? h("button", { class: "small ghost danger-text", disabled: data.bloqueado, title: "Borrar toda la traducción de este capítulo",
+          onclick: () => clearChapter(index, data.titulo, data.hechos) }, svgIcon("papelera"), "Borrar traducción") : null),
       data.copia_borrada ? h("div", { class: "note row", style: "margin-top:8px;padding:8px 12px" },
         h("span", { style: "flex:1" }, "Hay una traducción borrada de este capítulo."),
         h("button", { class: "small ghost", disabled: data.bloqueado, onclick: () => restoreChapter(index) }, "Recuperarla")) : null,
@@ -1153,6 +1162,7 @@ async function renderReview(v) {
       data.resumen ? h("details", { style: "margin-top:8px" }, h("summary", { class: "muted small" }, "Resumen del capítulo"), h("p", { class: "small" }, data.resumen)) : null,
       h("div", { class: "seg-cols" }, h("span", {}, `Original · ${state.summary.idioma_origen}`), h("span", {}, `Traducción · ${state.summary.idioma_destino}`))),
     manualPanel(index),
+    data.hechos ? reviewPanel(index, data) : null,
     rows);
   if (state.focusSeg !== null && state.focusSeg !== undefined) {
     const el = $(`#seg-${state.focusSeg}`);
@@ -1229,8 +1239,165 @@ function segmentRow(data, s, issues = []) {
     } }, "Retraducir") : null);
 
   const flagged = s.avisos.length || issues.some((p) => p.nivel === "error");
-  const row = h("div", { id: `seg-${s.n}`, class: "seg" + (!s.tgt ? " pending" : flagged ? " flagged" : "") }, src, tgt, meta);
+  let suggestion = null;
+  if (s.sugerencia) {
+    const resolve = async (accept) => {
+      const st = await guard(() => rpc("review_resolve", data.index, s.n, accept));
+      if (!st) return;
+      if (accept) {
+        s.tgt = s.sugerencia.texto;
+        saved = normalizeMarked(s.tgt);
+        markedToDom(tgt, s.tgt, marks);
+        tgt.classList.remove("empty");
+        status.textContent = "✓ corrección aceptada";
+        status.className = "small saved";
+      }
+      s.sugerencia = null;
+      suggestion.remove();
+      updateReviewStatus(st);
+    };
+    suggestion = h("div", { class: "suggestion" },
+      h("div", { class: "row" },
+        h("span", { class: "eyebrow", style: "margin:0" }, "Sugerencia de la revisión"),
+        s.sugerencia.motivo ? h("span", { class: "muted small", style: "font-style:italic" }, s.sugerencia.motivo) : null),
+      diffView(s.tgt || "", s.sugerencia.texto, marks),
+      (s.sugerencia.avisos || []).map((w) => h("span", { class: "warn small" }, w)),
+      h("div", { class: "row" },
+        h("button", { class: "small gold", disabled: data.bloqueado, onclick: () => resolve(true) }, "Aceptar"),
+        h("button", { class: "small ghost", disabled: data.bloqueado, onclick: () => resolve(false) }, "Descartar")));
+  }
+  const row = h("div", { id: `seg-${s.n}`, class: "seg" + (!s.tgt ? " pending" : flagged ? " flagged" : "") }, src, tgt, suggestion, meta);
   return row;
+}
+
+/* Diferencias palabra a palabra entre la traducción y la sugerencia. */
+function plainOf(marked, marks) {
+  const el = h("div", {});
+  markedToDom(el, marked || "", marks || {});
+  el.querySelectorAll(".mk.x").forEach((x) => x.remove());
+  return el.textContent.replace(/\s+/g, " ").trim();
+}
+
+function wordDiff(a, b) {
+  const A = a.split(/(\s+)/).filter((t) => t !== "");
+  const B = b.split(/(\s+)/).filter((t) => t !== "");
+  const n = A.length;
+  const m = B.length;
+  if (n * m > 250000) return [{ type: "del", text: a }, { type: "ins", text: " " + b }];
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  }
+  const out = [];
+  const push = (type, text) => {
+    const last = out[out.length - 1];
+    if (last && last.type === type) last.text += text;
+    else out.push({ type, text });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { push("eq", A[i]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) push("del", A[i++]);
+    else push("ins", B[j++]);
+  }
+  while (i < n) push("del", A[i++]);
+  while (j < m) push("ins", B[j++]);
+  return out;
+}
+
+function diffView(before, after, marks) {
+  const parts = wordDiff(plainOf(before, marks), plainOf(after, marks));
+  return h("div", { class: "diff" }, parts.map((p) => (p.type === "eq" ? p.text
+    : h(p.type === "del" ? "del" : "ins", { class: "d-" + p.type }, p.text))));
+}
+
+let updateReviewStatus = () => {};
+
+function reviewPanel(index, data) {
+  const manual = state.summary.proveedor.tipo === "manual";
+  const busy = state.task && state.task.activa;
+  const counter = h("strong", {}, "…");
+  const bulk = h("div", { class: "row" });
+  const out = h("textarea", { placeholder: "Pega aquí la respuesta completa del chat (el bloque de código con las correcciones <fix …>)." });
+  const info = h("p", { class: "muted small", style: "margin:0" });
+  let current = null;
+
+  updateReviewStatus = (st) => {
+    current = st;
+    counter.textContent = st.por_revisar
+      ? `${plural(st.por_revisar, "párrafo sin revisar", "párrafos sin revisar")} · ${plural(st.sugerencias, "sugerencia pendiente", "sugerencias pendientes")}`
+      : st.sugerencias ? `Capítulo revisado · ${plural(st.sugerencias, "sugerencia pendiente", "sugerencias pendientes")}` : "Capítulo revisado: no quedan sugerencias pendientes.";
+    bulk.textContent = "";
+    if (st.sugerencias) {
+      put(bulk,
+        h("button", { class: "small ghost", onclick: () => resolveAll(true) }, "Aceptar todas"),
+        h("button", { class: "small ghost danger-text", onclick: () => resolveAll(false) }, "Descartar todas"));
+    }
+    if (!st.por_revisar && st.revisados) {
+      put(bulk, h("button", { class: "small ghost", title: "Marcar todo el capítulo como pendiente de revisar", onclick: async () => {
+        const r = await guard(() => rpc("review_reset", index));
+        if (r) updateReviewStatus(r);
+      } }, "Revisar todo otra vez"));
+    }
+    if (reviewBtn) reviewBtn.disabled = !st.por_revisar || busy || data.bloqueado;
+  };
+
+  const resolveAll = async (accept) => {
+    if (!accept && !(await modal(`¿Descartar las ${current.sugerencias} sugerencias de este capítulo?`, { ok: "Descartar todas" }))) return;
+    const st = await guard(() => rpc("review_resolve", index, null, accept));
+    if (!st) return;
+    toast(accept ? `${plural(st.resueltas, "corrección aceptada", "correcciones aceptadas")}.` : "Sugerencias descartadas.");
+    state.reviewOpen = true;
+    await refreshSummary();
+    render();
+  };
+
+  const copyNext = async () => {
+    const p = await guard(() => rpc("review_manual_prompt", index));
+    if (p === undefined) return false;
+    if (p === null) {
+      toast("No quedan párrafos por revisar en este capítulo.");
+      return false;
+    }
+    info.textContent = `Bloque copiado: párrafos ${p.ids[0]}–${p.ids[p.ids.length - 1]} (${fmt(p.caracteres)} caracteres).`;
+    if (await copyText(p.texto)) toast("Bloque de revisión copiado. Pégalo en tu chat de IA.");
+    return true;
+  };
+
+  const doImport = async (thenCopy) => {
+    if (!out.value.trim()) return toast("Pega primero la respuesta del chat.", true);
+    const r = await guard(() => rpc("review_manual_import", index, out.value));
+    if (!r) return;
+    out.value = "";
+    toast(r.sugerencias ? `${plural(r.sugerencias, "sugerencia", "sugerencias")} en ${plural(r.revisados, "párrafo revisado", "párrafos revisados")}.`
+      : `Sin correcciones en ${plural(r.revisados, "párrafo revisado", "párrafos revisados")}.`);
+    if (thenCopy && r.por_revisar) await copyNext();
+    state.reviewOpen = true;
+    render();
+  };
+
+  const reviewBtn = manual ? null : h("button", { class: "gold", onclick: () => {
+    state.reviewOpen = true;
+    startTask(() => rpc("review_start", index));
+  } }, "Revisar con IA");
+
+  const panel = h("div", { id: "review-panel", class: "card manual stack", hidden: !state.reviewOpen },
+    h("div", { class: "eyebrow", style: "margin:0" }, "Segunda pasada"),
+    h("h3", { style: "margin-top:0" }, "Revisión con IA"),
+    h("p", { class: "small", style: "margin:0" }, "Una IA relee la traducción junto al original, con la guía de estilo y el glosario, y propone correcciones: errores de sentido, omisiones, glosario, tuteo o usted, frases poco naturales y puntuación. Nada se cambia solo: cada sugerencia aparece bajo su párrafo para aceptarla o descartarla."),
+    h("div", { class: "row" }, counter, h("div", { class: "spacer" }), bulk),
+    manual
+      ? [h("div", { class: "row" }, h("button", { onclick: copyNext }, "Copiar bloque de revisión"), info), out,
+        h("div", { class: "row end" },
+          h("button", { class: "ghost", onclick: () => doImport(false) }, "Solo importar"),
+          h("button", { class: "gold", onclick: () => doImport(true) }, "Importar y copiar el siguiente"))]
+      : h("div", { class: "row" }, reviewBtn, h("span", { class: "muted small" }, "Revisa los párrafos que aún no se revisaron; usa la IA configurada.")));
+  rpc("review_status", index).then((st) => {
+    updateReviewStatus(st);
+    if (st.sugerencias && !state.reviewOpen) { panel.hidden = false; }
+  }).catch(() => {});
+  return panel;
 }
 
 function manualPanel(index) {

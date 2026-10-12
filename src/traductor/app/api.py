@@ -17,7 +17,7 @@ from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
 
-from .. import __version__, inline, knowledge, qa, updates
+from .. import __version__, inline, knowledge, qa, review, updates
 from .. import search as finder
 from ..epub import EpubBook, EpubError
 from ..pdf2epub import PdfError
@@ -27,6 +27,7 @@ from ..prompts import LANG_NAMES, VARIANTS
 from ..providers import KINDS, ProviderError, config_dir, get_api_key, make_provider, save_api_key
 from ..providers.anthropic_provider import PRICES, SUGGESTED_MODELS, estimate_cost
 from ..providers.base import Usage
+from ..review import Reviewer
 from ..translate import CHAT_PRESETS, DEFAULT_MANUAL_BLOCK, Options, Translator, pseudo_slots
 
 LOCAL_KINDS = {"ollama", "lmstudio", "manual"}
@@ -504,6 +505,7 @@ class Api:
             "segmentos": [
                 {"n": s["n"], "tag": s.get("tag", ""), "src": s["src"], "tgt": s.get("tgt"),
                  "nota": s.get("nota"), "avisos": s.get("avisos", []), "editado": s.get("editado", False),
+                 "sugerencia": s.get("sugerencia"), "revisado_ia": bool(s.get("revisado_ia")),
                  "marcas": {str(k): v for k, v in marks.get(s["n"], {}).items()}}
                 for s in data["segmentos"]
             ],
@@ -658,6 +660,53 @@ class Api:
     def manual_prep_cancel(self) -> bool:
         self._manual_prep().cancel()
         return True
+
+    # -- segunda pasada: revisión con IA -----------------------------------------
+
+    def review_status(self, index: int) -> dict:
+        return review.status(self._need_project(), index)
+
+    def review_start(self, index: int) -> dict:
+        """Revisa con la IA conectada los párrafos traducidos aún sin revisar (en segundo plano)."""
+        p = self._need_project()
+        provider = self._provider()
+        title = p.load_chapter(index).get("titulo") or f"Documento {index}"
+
+        def run(task: TaskRunner):
+            task.state["capitulo"] = index
+            task.log(f"Revisando «{title}» con {provider.model}…")
+            reviewer = Reviewer(p, provider, log=task.log)
+            result = reviewer.review_chapter(
+                index, should_stop=task.cancelled,
+                progress=lambda k, total: task.progress(k / total if total else 1, f"Bloque {min(k + 1, total)} de {total}"))
+            task.log(f"Listo: {result['sugerencias']} sugerencia(s) en {result['bloques']} bloque(s).")
+            return result
+
+        self._tasks.start("Revisión con IA", run)
+        return self.task_status()
+
+    def review_manual_prompt(self, index: int) -> dict | None:
+        self._check_not_busy(index)
+        return Reviewer(self._need_project()).manual_prompt(index)
+
+    def review_manual_import(self, index: int, text: str) -> dict:
+        self._check_not_busy(index)
+        p = self._need_project()
+        result = Reviewer(p).manual_import(index, text)
+        return dict(result, **review.status(p, index))
+
+    def review_resolve(self, index: int, n: int | None, accept: bool) -> dict:
+        """Acepta o descarta una sugerencia (o todas las del capítulo si ``n`` es None)."""
+        self._check_not_busy(index)
+        p = self._need_project()
+        done = review.resolve(p, index, n, accept)
+        return dict(review.status(p, index), resueltas=done)
+
+    def review_reset(self, index: int) -> dict:
+        self._check_not_busy(index)
+        p = self._need_project()
+        review.reset(p, index)
+        return review.status(p, index)
 
     # -- control de calidad (sin IA) -------------------------------------------
 

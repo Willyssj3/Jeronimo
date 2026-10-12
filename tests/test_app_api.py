@@ -127,3 +127,18 @@ def test_clear_and_restore_chapter_translation(api):
     assert ch["segmentos"][3]["tgt"] == "Mi versión." and ch["segmentos"][1]["tgt"].startswith("ES MIRELA")
     with pytest.raises(ValueError):
         api.restore_translation(0)
+
+
+def test_review_pass_through_the_api(api):
+    api.translate("capitulo", 0)
+    assert wait(api)["error"] is None
+    assert api.review_status(0) == {"por_revisar": 4, "revisados": 0, "sugerencias": 0}
+    api.review_start(0)
+    st = wait(api)
+    assert st["error"] is None and st["resultado"] == {"bloques": 1, "sugerencias": 1}
+    segs = api.chapter(0)["segmentos"]
+    assert segs[1]["sugerencia"]["texto"].startswith("ES MIRELA WALKED TO PUERTOARADO") and segs[1]["revisado_ia"]
+    r = api.review_resolve(0, None, True)
+    assert r["resueltas"] == 1 and r["sugerencias"] == 0
+    assert "PUERTOARADO" in api.chapter(0)["segmentos"][1]["tgt"]
+    assert api.review_reset(0)["por_revisar"] == 4

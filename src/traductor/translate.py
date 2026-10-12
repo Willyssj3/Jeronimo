@@ -191,6 +191,9 @@ class Translator:
             seg["avisos"] = warnings
             seg["nota"] = notes.get(seg["n"]) or None
             seg["editado"] = False
+            # Una traducción nueva se puede volver a revisar; la sugerencia anterior ya no vale.
+            seg.pop("sugerencia", None)
+            seg.pop("revisado_ia", None)
         return missing
 
     # -- traducción con IA ----------------------------------------------------

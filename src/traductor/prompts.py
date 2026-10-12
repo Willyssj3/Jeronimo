@@ -167,6 +167,88 @@ def parse_segments(text: str) -> tuple[dict[int, str], dict[int, str]]:
 
 
 # ---------------------------------------------------------------------------
+# Segunda pasada: revisión de la traducción por una IA
+
+REVIEW_SYSTEM = """\
+You are a meticulous literary editor. You are reviewing the translation of the book "{title}"{author_part} from {src} into {tgt}.
+{variant}
+Compare each translated segment with its original and propose a correction only when there is a real problem:
+- meaning changed, mistranslations, omitted or added content;
+- the glossary is not followed, or names and terms are inconsistent;
+- wrong register or forms of address according to the style guide (for example tú/usted);
+- clumsy or unnatural phrasing in {tgt}, or calques from {src};
+- spelling, grammar, punctuation and typography (dialogue dashes, quotation marks, opening ¿ and ¡ in Spanish).
+Do not rewrite for personal taste, do not simplify or modernize the author's style, and keep the voice of the official translator described in the style guide. If a segment is fine, leave it alone.
+
+Format rules:
+- The input comes as <seg id="N"><source>…</source><translation>…</translation></seg>.
+- For each segment that needs changes, answer <fix id="N"><text>the complete corrected translation of that segment</text><why>a very short reason, in Spanish</why></fix>.
+- In <text>, keep every <gN>…</gN> and <xN/> tag of the translation exactly once (move <gN> pairs with their words if needed) and keep &amp; &lt; &gt; escaped.
+- Write nothing for segments that are fine. If no segment needs changes, answer only <nofixes/>.
+
+# Style guide
+{style_guide}
+
+# About the book
+{synopsis}
+"""
+
+REVIEW_MANUAL_OUTPUT = """
+
+# Output format
+Write your whole answer inside ONE single code block (```), containing only the <fix> elements (or <nofixes/>). Do not write anything before or after the code block. If the answer does not fit in one message, stop right after a complete </fix>."""
+
+
+def review_system(*, title: str, author: str, src: str, tgt: str, variant: str,
+                  style_guide: str, synopsis: str) -> str:
+    return REVIEW_SYSTEM.format(
+        title=title,
+        author_part=f" by {author}" if author else "",
+        src=lang_name(src),
+        tgt=lang_name(tgt),
+        variant=variant_line(variant, tgt),
+        style_guide=style_guide.strip() or NO_STYLE_GUIDE.format(tgt=lang_name(tgt)),
+        synopsis=synopsis.strip() or NO_SYNOPSIS,
+    )
+
+
+def review_user(*, segments: list[tuple[int, str, str]], glossary: list[dict], chapter_summary: str) -> str:
+    parts: list[str] = []
+    if glossary:
+        lines = [f"- {g['termino']} → {g['traduccion']}" + (f" ({g['nota']})" if g.get("nota") else "") for g in glossary]
+        parts.append("# Glossary (mandatory renderings)\n" + "\n".join(lines))
+    if chapter_summary:
+        parts.append("# Chapter context\n" + chapter_summary.strip())
+    segs = "\n".join(f'<seg id="{n}"><source>{src}</source><translation>{tgt}</translation></seg>'
+                     for n, src, tgt in segments)
+    parts.append("# Segments to review\n" + segs)
+    return "\n\n".join(parts)
+
+
+_FIX_RE = re.compile(r'<fix\s+id\s*=\s*["\']?(\d+)["\']?\s*>(.*?)</fix\s*>', re.DOTALL | re.IGNORECASE)
+_TEXT_RE = re.compile(r"<text>(.*?)</text\s*>", re.DOTALL | re.IGNORECASE)
+_WHY_RE = re.compile(r"<why>(.*?)</why\s*>", re.DOTALL | re.IGNORECASE)
+
+
+def parse_fixes(text: str) -> dict[int, tuple[str, str]]:
+    """Correcciones propuestas ``{id: (texto, motivo)}``."""
+    fixes: dict[int, tuple[str, str]] = {}
+    for m in _FIX_RE.finditer(text or ""):
+        body = m.group(2)
+        t = _TEXT_RE.search(body)
+        if not t:
+            continue
+        why = _WHY_RE.search(body)
+        fixes.setdefault(int(m.group(1)), (_NL_RE.sub(" ", t.group(1)).strip(),
+                                           _NL_RE.sub(" ", why.group(1)).strip() if why else ""))
+    return fixes
+
+
+def looks_like_review(text: str) -> bool:
+    return bool(_FIX_RE.search(text or "")) or "<nofixes" in (text or "").lower()
+
+
+# ---------------------------------------------------------------------------
 # Conocimiento: guía de estilo, glosario y análisis del libro
 
 ANALYST_SYSTEM = "You are an expert in literary translation and translation analysis. Follow the requested output format exactly."
