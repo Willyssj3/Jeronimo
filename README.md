@@ -1,7 +1,10 @@
-# Traductor de Libros
+<p align="center"><img src="docs/logo.png" alt="Jerónimo" width="128"></p>
 
-Aplicación gratuita y de código abierto para **traducir libros EPUB con IA
-imitando el estilo de las traducciones oficiales del autor**.
+# Jerónimo — traductor de libros con IA
+
+**Jerónimo** (por san Jerónimo, patrono de los traductores) es una aplicación
+gratuita y de código abierto para **traducir libros EPUB con IA imitando el
+estilo de las traducciones oficiales del autor**.
 
 La diferencia con otros traductores de EPUB: le das a la app otros libros del
 mismo autor junto con su **traducción oficial** (por ejemplo, el original en
@@ -27,11 +30,11 @@ EPUB (cursivas, notas al pie, imágenes, índice) y permite revisar y aprobar
 
 1. Entra en la pestaña **Actions** del repositorio, abre la última ejecución
    correcta de «Pruebas e instalador de Windows» y descarga el artefacto
-   **TraductorDeLibros-Windows** (o, cuando haya versiones publicadas, la
+   **Jeronimo-Windows** (o, cuando haya versiones publicadas, la
    sección **Releases**).
-2. Descomprime y ejecuta `TraductorDeLibros-…-instalador.exe`. No necesita
+2. Descomprime y ejecuta `Jeronimo-…-instalador.exe`. No necesita
    permisos de administrador. También hay una versión portátil en ZIP.
-3. Abre **Traductor de Libros** desde el menú Inicio.
+3. Abre **Jerónimo** desde el menú Inicio.
 
 La app usa el componente WebView2 de Microsoft Edge, incluido en Windows 10 y
 11. Si faltara, se abre automáticamente en el navegador.
@@ -87,8 +90,8 @@ Para usuarios avanzados (requiere Python 3.11 o superior):
 
 ```bash
 pip install -e ".[escritorio]"
-traductor-app                      # abre la app
-traductor-app --navegador          # la abre en el navegador
+jeronimo                           # abre la app
+jeronimo --navegador               # la abre en el navegador
 
 traductor nuevo mi-libro "Libro.epub" --destino es
 traductor referencia mi-libro "Otro_EN.epub" "Otro_ES.epub"
@@ -132,4 +135,5 @@ publica automáticamente en *Releases*.
 
 ## Licencia
 
-[MIT](LICENSE).
+[MIT](LICENSE). La «J» del logo está trazada con la tipografía EB Garamond
+(SIL Open Font License 1.1).

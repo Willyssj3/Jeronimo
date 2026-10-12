@@ -1,6 +1,6 @@
 "use strict";
 
-/* Traductor de Libros — interfaz. Habla con Python por pywebview (ventana)
+/* Jerónimo (Traductor de Libros) — interfaz. Habla con Python por pywebview (ventana)
    o por HTTP local con token (modo navegador). */
 
 const params = new URLSearchParams(location.search);
@@ -255,7 +255,7 @@ async function refreshSummary() {
 }
 
 $("#btn-quit").onclick = async () => {
-  if (!(await modal("¿Cerrar Traductor de Libros? El progreso ya está guardado.", { ok: "Salir" }))) return;
+  if (!(await modal("¿Cerrar Jerónimo? El progreso ya está guardado.", { ok: "Salir" }))) return;
   if (await guard(() => rpc("quit_app"))) {
     document.body.innerHTML = "<p style='padding:40px;font-size:1.2rem'>Puedes cerrar esta pestaña.</p>";
   }
@@ -362,7 +362,7 @@ function renderHome(v) {
             } }, "Abrir") : h("span", { class: "badge" }, "no encontrado"))))
           : h("p", { class: "muted" }, "Todavía no hay proyectos."))),
     pdfCard(),
-    h("p", { class: "muted small" }, `Versión ${info.version} · modo ${info.modo}. Usa solo libros que tengas derecho a traducir.`));
+    h("p", { class: "muted small" }, `Jerónimo ${info.version} · modo ${info.modo}. Usa solo libros que tengas derecho a traducir.`));
 }
 
 function pdfCard() {

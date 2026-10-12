@@ -1,4 +1,4 @@
-"""Arranque de la app: ventana nativa (pywebview) o, si no es posible, el navegador."""
+"""Arranque de Jerónimo: ventana nativa (pywebview) o, si no es posible, el navegador."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def _say(msg: str) -> None:
 def run_browser(port: int = 0, open_browser: bool = True) -> int:
     api = Api(mode="navegador")
     server, url = serve(api, port=port, open_browser=open_browser)
-    _say(f"Traductor de Libros abierto en {url}")
+    _say(f"Jerónimo abierto en {url}")
     _say("Para salir, pulsa «Salir» en la app o cierra esta ventana.")
     try:
         server.serve_forever()
@@ -28,7 +28,7 @@ def run_browser(port: int = 0, open_browser: bool = True) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="traductor-app", description="Traductor de Libros")
+    parser = argparse.ArgumentParser(prog="jeronimo", description="Jerónimo, traductor de libros con IA")
     parser.add_argument("--navegador", action="store_true", help="abrir la app en el navegador")
     parser.add_argument("--puerto", type=int, default=0)
     parser.add_argument("--sin-abrir", action="store_true", help="no abrir el navegador automáticamente")
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     api = Api(mode="escritorio")
     try:
         window = webview.create_window(
-            "Traductor de Libros", url=str(UI_DIR / "index.html"), js_api=Bridge(api),
+            "Jerónimo — Traductor de libros", url=str(UI_DIR / "index.html"), js_api=Bridge(api),
             width=1280, height=840, min_size=(960, 640), text_select=True)
         api._window = window
         webview.start()

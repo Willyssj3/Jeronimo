@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Construcción con PyInstaller: pyinstaller --noconfirm packaging/TraductorDeLibros.spec
+# Construcción con PyInstaller (desde packaging/): pyinstaller --noconfirm Jeronimo.spec
+import os
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 datas = (
@@ -30,8 +31,9 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="TraductorDeLibros",
+    name="Jeronimo",
     console=False,
+    icon=os.path.join(SPECPATH, "jeronimo.ico"),
     disable_windowed_traceback=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="TraductorDeLibros")
+coll = COLLECT(exe, a.binaries, a.datas, name="Jeronimo")

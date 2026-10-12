@@ -40,21 +40,21 @@ jobs:
         run: echo "VERSION=$(python -c 'import traductor; print(traductor.__version__)')" >> "$GITHUB_ENV"
       - name: Construir la app (PyInstaller)
         working-directory: packaging
-        run: pyinstaller --noconfirm --distpath ..\dist --workpath ..\build TraductorDeLibros.spec
+        run: pyinstaller --noconfirm --distpath ..\dist --workpath ..\build Jeronimo.spec
       - name: Comprobar el paquete
         run: |
-          if (!(Test-Path dist\TraductorDeLibros\TraductorDeLibros.exe)) { exit 1 }
-          if (!(Get-ChildItem -Recurse dist\TraductorDeLibros -Filter app.js)) { exit 1 }
+          if (!(Test-Path dist\Jeronimo\Jeronimo.exe)) { exit 1 }
+          if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter logo.svg)) { exit 1 }
       - name: Crear el instalador (Inno Setup)
         run: |
           choco install innosetup -y --no-progress
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:VERSION" packaging\instalador.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
       - name: Versión portátil (ZIP)
-        run: Compress-Archive -Path dist\TraductorDeLibros\* -DestinationPath "dist\instalador\TraductorDeLibros-$env:VERSION-portable.zip"
+        run: Compress-Archive -Path dist\Jeronimo\* -DestinationPath "dist\instalador\Jeronimo-$env:VERSION-portable.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: TraductorDeLibros-Windows
+          name: Jeronimo-Windows
           path: dist/instalador/*
       - name: Publicar versión
         if: startsWith(github.ref, 'refs/tags/v')
