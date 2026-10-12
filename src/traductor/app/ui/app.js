@@ -410,7 +410,7 @@ function renderHome(v) {
     h("div", { class: "grid2" },
       h("div", { class: "card stack" },
         cardHead("libro", "Nuevo proyecto"),
-        h("div", { class: "field" }, h("label", {}, "Libro a traducir ", h("span", { class: "hint" }, "(EPUB sin DRM)")), pathField("new-epub", "C:\\Libros\\mi-libro.epub")),
+        h("div", { class: "field" }, h("label", {}, "Libro a traducir ", h("span", { class: "hint" }, "(EPUB sin DRM; otros formatos, conviértelos abajo)")), pathField("new-epub", "C:\\Libros\\mi-libro.epub")),
         h("div", { class: "row" },
           h("div", { class: "field", style: "flex:1" }, h("label", {}, "Traducir al"), langSelect),
           h("div", { class: "field", style: "flex:1" }, h("label", {}, "Variante"), variant)),
@@ -425,6 +425,11 @@ function renderHome(v) {
           onclick: async () => {
             const epub = $("#new-epub").value.trim();
             if (!epub) return toast("Elige el EPUB que quieres traducir.", true);
+            if (!/\.epub"?$/i.test(epub)) {
+              $("#pdf-in").value = epub;
+              $("#pdf-in").scrollIntoView({ behavior: "smooth", block: "center" });
+              return toast("Ese archivo no es un EPUB: conviértelo primero con «Convertir a EPUB» y luego crea el proyecto.", true);
+            }
             const s = await guard(() => rpc("create_project", epub, $("#new-folder").value.trim(), $("#new-lang").value, $("#new-variant").value,
               $("#new-profile") ? $("#new-profile").value : ""));
             if (s) await opened(s);
@@ -475,24 +480,27 @@ async function manageProfiles() {
 }
 
 function pdfCard() {
-  const last = state.lastTask && state.lastTask.nombre === "Convertir PDF a EPUB" ? state.lastTask : null;
+  const last = state.lastTask && ["Convertir PDF a EPUB", "Convertir a EPUB"].includes(state.lastTask.nombre) ? state.lastTask : null;
   const r = last && last.resultado;
   const busy = state.task && state.task.activa;
   return h("div", { class: "card stack" },
-    cardHead("pdf", "Convertir PDF a EPUB"),
-    h("p", { class: "muted" }, "Para tus propios PDF con texto seleccionable (no escaneados): quita encabezados y números de página, une las palabras cortadas, detecta capítulos, cursivas y notas al pie, y crea un EPUB listo para tu lector o para traducir."),
-    h("div", { class: "field" }, h("label", {}, "PDF"), pathField("pdf-in", "C:\\Libros\\mi-libro.pdf", "pdf")),
+    cardHead("pdf", "Convertir a EPUB"),
+    h("p", { class: "muted" }, "Convierte tus libros en PDF (con texto seleccionable), Word, TXT o FB2, y los de Kindle sin DRM (MOBI, AZW3; requiere Calibre), en un EPUB listo para tu lector o para traducir. Detecta capítulos, cursivas y notas al pie; en los PDF, además, quita encabezados y números de página y une las palabras cortadas."),
+    h("div", { class: "field" }, h("label", {}, "Archivo ", h("span", { class: "hint" }, "(PDF, Word, TXT, FB2, MOBI o AZW3)")), pathField("pdf-in", "C:\\Libros\\mi-libro.pdf", "libro")),
     h("div", { class: "field" }, h("label", {}, "Guardar EPUB en ", h("span", { class: "hint" }, "(opcional; por defecto, junto al PDF)")),
       h("input", { id: "pdf-out", type: "text", placeholder: "C:\\Libros\\mi-libro.epub" })),
     h("div", { class: "row end" }, h("button", { disabled: busy, onclick: () => {
       const pdf = $("#pdf-in").value.trim();
-      if (!pdf) return toast("Elige el PDF que quieres convertir.", true);
-      startTask(() => rpc("convert_pdf", pdf, $("#pdf-out").value.trim()));
+      if (!pdf) return toast("Elige el archivo que quieres convertir.", true);
+      startTask(() => rpc("convert_book", pdf, $("#pdf-out").value.trim()));
     } }, "Convertir")),
     r ? h("div", { class: "result" },
       h("p", { style: "margin-top:0" }, h("strong", {}, "EPUB creado: "), r.ruta),
-      h("p", { class: "small" }, `«${r.titulo}»${r.autor ? " · " + r.autor : ""} · ${r.paginas} páginas · ${r.capitulos} capítulos · ${r.notas} notas · ${r.lineas_quitadas} encabezados o números de página quitados`
-        + (r.paginas_omitidas.length ? ` · índice impreso omitido (pág. ${r.paginas_omitidas.join(", ")})` : "")),
+      h("p", { class: "small" }, `«${r.titulo}»${r.autor ? " · " + r.autor : ""}`
+        + (r.paginas ? ` · ${plural(r.paginas, "página", "páginas")}` : "")
+        + ` · ${plural(r.capitulos, "capítulo", "capítulos")} · ${plural(r.notas, "nota", "notas")}`
+        + (r.lineas_quitadas ? ` · ${fmt(r.lineas_quitadas)} encabezados o números de página quitados` : "")
+        + ((r.paginas_omitidas || []).length ? ` · índice impreso omitido (pág. ${r.paginas_omitidas.join(", ")})` : "")),
       r.avisos.map((w) => h("p", { class: "warn small" }, w)),
       h("p", { class: "muted small" }, "Revísalo en tu lector: si algún encabezado o nota quedó mal, avísanos para mejorar el conversor."),
       h("div", { class: "row" },

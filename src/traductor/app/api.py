@@ -162,6 +162,10 @@ class Api:
         elif kind == "pdf":
             result = self._window.create_file_dialog(
                 webview.FileDialog.OPEN, directory=directory, file_types=("Documentos PDF (*.pdf)", "Todos (*.*)"))
+        elif kind == "libro":
+            result = self._window.create_file_dialog(
+                webview.FileDialog.OPEN, directory=directory,
+                file_types=("Libros (*.pdf;*.docx;*.txt;*.fb2;*.mobi;*.azw3;*.azw)", "Todos (*.*)"))
         else:
             result = self._window.create_file_dialog(
                 webview.FileDialog.OPEN, directory=directory, file_types=("Libros EPUB (*.epub)", "Todos (*.*)"))
@@ -245,6 +249,33 @@ class Api:
                     "titulo": report.title, "autor": report.author, "idioma": report.language}
 
         self._tasks.start("Convertir PDF a EPUB", run)
+        return self.task_status()
+
+    def convert_book(self, path: str, out_path: str = "") -> dict:
+        """Convierte a EPUB un PDF, Word, TXT, FB2, MOBI o AZW3 (en segundo plano)."""
+        from ..convert import FORMATS, convert, kind_of
+
+        src = Path(path.strip().strip('"'))
+        if not src.is_file():
+            raise FileNotFoundError(f"No encuentro el archivo «{src}».")
+        kind = kind_of(src)
+        if kind not in FORMATS or kind == ".epub":
+            raise ValueError("Elige un PDF, Word (DOCX), TXT, FB2, MOBI o AZW3."
+                             if kind != ".epub" else "Ese libro ya es un EPUB: úsalo directamente para crear el proyecto.")
+        out = Path(out_path.strip().strip('"')) if out_path and out_path.strip() else None
+
+        def run(task: TaskRunner):
+            task.log(f"Convirtiendo «{src.name}» ({FORMATS[kind]})…")
+            result, report = convert(src, out, progress=task.progress)
+            task.log(f"Listo: {report.chapters} capítulos, {report.notes} notas.")
+            for w in report.warnings:
+                task.log(f"Aviso: {w}")
+            return {"ruta": str(result), "formato": FORMATS[kind], "paginas": report.pages,
+                    "capitulos": report.chapters, "notas": report.notes, "lineas_quitadas": report.removed_lines,
+                    "paginas_omitidas": report.dropped_pages, "avisos": report.warnings,
+                    "titulo": report.title, "autor": report.author, "idioma": report.language}
+
+        self._tasks.start("Convertir a EPUB", run)
         return self.task_status()
 
     # -- proyectos -----------------------------------------------------------
