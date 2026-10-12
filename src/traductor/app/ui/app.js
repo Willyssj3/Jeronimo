@@ -139,6 +139,9 @@ const fmt = (n) => Number(n || 0).toLocaleString(I18N.locale);
 const N_ = (text) => text;
 const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
 const plural = (n, one, many) => (n === 1 ? `1 ${one}` : `${fmt(n)} ${many}`);
+const money = (x) => x.toLocaleString(I18N.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/* Los índices llevan un título que pone la app (guardado en el idioma de ese momento): se muestra traducido. */
+const docTitle = (title) => (title === "Índice" || title === "Índice (NCX)" ? t(title) : title);
 
 function toast(msg, isError = false) {
   const el = h("div", { class: isError ? "error" : "" }, msg);
@@ -391,7 +394,7 @@ function setChrome() {
   $("#project-name").textContent = open ? state.summary.titulo || state.summary.nombre : "";
   if (open) {
     const prog = state.summary.progreso;
-    $("#side-pct").textContent = `${pct(prog.hechos, prog.total)} %`;
+    $("#side-pct").textContent = t("{n} %", { n: pct(prog.hechos, prog.total) });
     $("#side-bar").style.width = `${pct(prog.hechos, prog.total)}%`;
   }
   for (const a of document.querySelectorAll("#sidebar a")) {
@@ -442,7 +445,7 @@ function renderHome(v) {
   const langSelect = h("select", { id: "new-lang" }, Object.entries(info.idiomas).map(([k, name]) =>
     h("option", { value: k, selected: k === I18N.lang }, `${name} (${k})`)));
   const variant = h("select", { id: "new-variant" },
-    h("option", { value: "auto" }, t("Igual que las traducciones oficiales")),
+    h("option", { value: "auto" }, t("Como la traducción oficial")),
     h("option", { value: "es-ES" }, t("Español de España")),
     h("option", { value: "es-419" }, t("Español neutro latinoamericano")),
     h("option", { value: "es-AR" }, t("Español rioplatense (voseo)")),
@@ -557,7 +560,7 @@ function pdfCard() {
     } }, t("Convertir"))),
     r ? h("div", { class: "result" },
       h("p", { style: "margin-top:0" }, h("strong", {}, t("EPUB creado: ")), r.ruta),
-      h("p", { class: "small" }, `«${r.titulo}»${r.autor ? " · " + r.autor : ""}`
+      h("p", { class: "small" }, t("«{titulo}»", { titulo: r.titulo }) + (r.autor ? " · " + r.autor : "")
         + (r.paginas ? ` · ${plural(r.paginas, t("página"), t("páginas"))}` : "")
         + ` · ${plural(r.capitulos, t("capítulo"), t("capítulos"))} · ${plural(r.notas, t("nota"), t("notas"))}`
         + (r.lineas_quitadas ? " · " + t("{n} encabezados o números de página quitados", { n: fmt(r.lineas_quitadas) }) : "")
@@ -593,7 +596,7 @@ function costText(est) {
   if (!est) return "";
   if (est.coste_usd === 0) return t("sin coste (modelo local o modo manual)");
   if (est.coste_usd === null || est.coste_usd === undefined) return t("depende del modelo y del plan del proveedor");
-  return `≈ ${est.coste_usd.toFixed(2)} USD`;
+  return `≈ ${money(est.coste_usd)} USD`;
 }
 
 function renderSummary(v) {
@@ -629,7 +632,7 @@ function renderSummary(v) {
       h("div", { class: "card" }, h("h3", { style: "margin-top:0" }, t("Consumo hasta ahora")),
         s.uso.length ? h("table", {}, h("tr", {}, h("th", {}, t("Modelo")), h("th", {}, t("Entrada")), h("th", {}, t("Salida")), h("th", {}, t("Coste"))),
           s.uso.map((u) => h("tr", {}, h("td", {}, u.modelo), h("td", { class: "num" }, fmt(u.input_tokens + (u.cache_read_tokens || 0))),
-            h("td", { class: "num" }, fmt(u.output_tokens)), h("td", { class: "num" }, u.coste === null ? "—" : t("{x} USD", { x: u.coste.toFixed(2) })))))
+            h("td", { class: "num" }, fmt(u.output_tokens)), h("td", { class: "num" }, u.coste === null ? "—" : t("{x} USD", { x: money(u.coste) })))))
           : h("p", { class: "muted" }, t("Todavía no se ha usado la IA en este proyecto.")))));
 }
 
@@ -645,7 +648,7 @@ function renderReferences(v) {
         h("div", { style: "flex:1" }, h("h3", { style: "margin:0 0 2px" }, r.nombre),
           h("div", { class: "muted small" }, `${r.titulo_original} ↔ ${r.titulo_traduccion}`),
           h("div", { class: "small" }, t("{pairs} pares · cobertura {coverage} % · ", { pairs: fmt(r.estadisticas.pairs), coverage: pct(r.estadisticas.coverage, 1) }),
-            h("span", { class: "badge " + (r.estadisticas.quality === "buena" ? "ok" : r.estadisticas.quality === "baja" ? "danger" : "warn") }, t("calidad {quality}", { quality: r.estadisticas.quality })))),
+            h("span", { class: "badge " + (r.estadisticas.quality === "buena" ? "ok" : r.estadisticas.quality === "baja" ? "danger" : "warn") }, t("calidad {quality}", { quality: t(r.estadisticas.quality) })))),
         h("button", { class: "small ghost", onclick: async () => {
           if (!(await modal(t("¿Quitar «{nombre}» de las referencias?", { nombre: r.nombre }), { ok: t("Quitar"), okClass: "danger" }))) return;
           const sum = await guard(() => rpc("remove_reference", r.carpeta));
@@ -1093,7 +1096,7 @@ function glossaryEditor(k) {
       h("button", { onclick: async () => {
         const n = await guard(() => rpc("save_glossary", rows));
         if (n === undefined) return;
-        toast(t("Glosario guardado: {n} términos.", { n }));
+        toast(t("Glosario guardado: {terminos}.", { terminos: plural(n, t("término"), t("términos")) }));
         state.summary = await rpc("project_summary");
         await offerGlossaryUpdate(original, rows);
         original = rows.map((e) => Object.assign({}, e));
@@ -1132,7 +1135,7 @@ function renderChapters(v) {
       h("table", {},
         h("tr", {}, h("th", {}, t("Capítulo")), h("th", {}, t("Palabras")), h("th", {}, t("Estado")), h("th", {}, t("Progreso")), h("th", {}, "")),
         chapters.map((c) => h("tr", { class: c.status === "omitido" ? "skipped" : "" },
-          h("td", {}, h("button", { class: "link", onclick: () => go("revision", c.index) }, c.title || t("Documento {index}", { index: c.index })), c.in_spine ? null : h("span", { class: "muted small" }, t(" (índice)"))),
+          h("td", {}, h("button", { class: "link", onclick: () => go("revision", c.index) }, docTitle(c.title) || t("Documento {index}", { index: c.index }))),
           h("td", { class: "num" }, fmt(c.words)),
           h("td", {}, statusBadge(c.status)),
           h("td", { style: "width:180px" }, h("div", { class: "row" }, h("div", { class: "progress" }, h("div", { style: `width:${pct(c.done, c.total)}%` })), h("span", { class: "small muted" }, `${c.done}/${c.total}`))),
@@ -1140,7 +1143,7 @@ function renderChapters(v) {
             h("button", { class: "small ghost", onclick: () => go("revision", c.index) }, t("Revisar")),
             c.status !== "omitido" && c.done < c.total && !manual ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", c.index)) }, t("Traducir")) : null,
             c.done ? h("button", { class: "small ghost danger-text icon-only", title: t("Borrar la traducción de este capítulo"), "aria-label": t("Borrar la traducción"),
-              disabled: busy && state.task && state.task.capitulo === c.index, onclick: () => clearChapter(c.index, c.title || t("Documento {index}", { index: c.index }), c.done) }, svgIcon("papelera")) : null,
+              disabled: busy && state.task && state.task.capitulo === c.index, onclick: () => clearChapter(c.index, docTitle(c.title) || t("Documento {index}", { index: c.index }), c.done) }, svgIcon("papelera")) : null,
             h("button", { class: "small ghost", title: t("No traducir este documento (créditos, publicidad…)"), onclick: async () => {
               const sum = await guard(() => rpc("set_skipped", c.index, c.status !== "omitido"));
               if (sum) { state.summary = sum; render(); }
@@ -1293,7 +1296,7 @@ async function renderReader(v) {
       h("div", { class: "row" },
         h("button", { class: "small ghost", onclick: () => go("revision", index) }, t("‹ Revisión")),
         h("div", { style: "flex:1;min-width:0" }, h("div", { class: "eyebrow", style: "margin:0 0 2px" }, t("Lectura")),
-          h("h1", { style: "margin:0" }, data.titulo)),
+          h("h1", { style: "margin:0" }, docTitle(data.titulo))),
         h("span", { class: "muted small" }, t("{done} de {total} párrafos traducidos", { done, total: data.total })),
         h("button", { class: "small ghost", title: t("Letra más pequeña"), onclick: () => resize(-0.1) }, "A−"),
         h("button", { class: "small ghost", title: t("Letra más grande"), onclick: () => resize(0.1) }, "A+")),
@@ -1305,8 +1308,8 @@ async function renderReader(v) {
     h("p", { class: "muted small reader-tip" }, t("Consejo: escuchar la traducción ayuda a detectar frases torpes, repeticiones y errores que leyendo se escapan. Haz clic en un párrafo para escuchar desde ahí.")),
     page,
     h("div", { class: "row", style: "justify-content:space-between;max-width:760px;margin:22px auto 0" },
-      prev ? h("button", { class: "ghost", onclick: () => go("lectura", prev.index) }, "‹ " + (prev.title || t("Anterior"))) : h("span"),
-      next ? h("button", { class: "ghost", onclick: () => go("lectura", next.index) }, (next.title || t("Siguiente")) + " ›") : h("span")));
+      prev ? h("button", { class: "ghost", onclick: () => go("lectura", prev.index) }, "‹ " + (docTitle(prev.title) || t("Anterior"))) : h("span"),
+      next ? h("button", { class: "ghost", onclick: () => go("lectura", next.index) }, (docTitle(next.title) || t("Siguiente")) + " ›") : h("span")));
   setButtons();
 }
 
@@ -1325,7 +1328,7 @@ async function clearChapter(index, title, done) {
   const r = await guard(() => rpc("clear_translation", index));
   if (!r) return;
   state.summary = r.resumen;
-  toast(t("Traducción borrada: {borrados} párrafos.", { borrados: fmt(r.borrados) }));
+  toast(t("Traducción borrada: {parrafos}.", { parrafos: plural(r.borrados, t("párrafo"), t("párrafos")) }));
   render();
 }
 
@@ -1333,7 +1336,7 @@ async function restoreChapter(index) {
   const r = await guard(() => rpc("restore_translation", index));
   if (!r) return;
   state.summary = r.resumen;
-  toast(r.recuperados ? t("Traducción recuperada: {recuperados} párrafos.", { recuperados: fmt(r.recuperados) }) : t("No había párrafos vacíos que recuperar."));
+  toast(r.recuperados ? t("Traducción recuperada: {parrafos}.", { parrafos: plural(r.recuperados, t("párrafo"), t("párrafos")) }) : t("No había párrafos vacíos que recuperar."));
   render();
 }
 
@@ -1390,7 +1393,7 @@ async function renderReview(v) {
       h("div", { class: "row" },
         h("button", { class: "small ghost", onclick: () => go("capitulos") }, t("‹ Capítulos")),
         h("div", { style: "flex:1;min-width:0" }, h("div", { class: "eyebrow", style: "margin:0 0 2px" }, t("Revisión")),
-          h("h1", { style: "margin:0" }, data.titulo)),
+          h("h1", { style: "margin:0" }, docTitle(data.titulo))),
         statusBadge(data.estado)),
       h("div", { class: "row", style: "margin-top:10px" },
         h("span", { class: "muted" }, t("{hechos} de {total} párrafos traducidos", { hechos: data.hechos, total: data.total })),
@@ -1415,7 +1418,7 @@ async function renderReview(v) {
         h("button", { class: "small ghost", title: t("Leer el capítulo como en el lector y escucharlo en voz alta"), onclick: () => go("lectura", index) }, svgIcon("libro"), t("Leer y escuchar")),
         h("div", { class: "spacer" }),
         data.hechos ? h("button", { class: "small ghost danger-text", disabled: data.bloqueado, title: t("Borrar toda la traducción de este capítulo"),
-          onclick: () => clearChapter(index, data.titulo, data.hechos) }, svgIcon("papelera"), t("Borrar traducción")) : null),
+          onclick: () => clearChapter(index, docTitle(data.titulo), data.hechos) }, svgIcon("papelera"), t("Borrar traducción")) : null),
       data.copia_borrada ? h("div", { class: "note row", style: "margin-top:8px;padding:8px 12px" },
         h("span", { style: "flex:1" }, t("Hay una traducción borrada de este capítulo.")),
         h("button", { class: "small ghost", disabled: data.bloqueado, onclick: () => restoreChapter(index) }, t("Recuperarla"))) : null,
@@ -1707,7 +1710,7 @@ function manualPanel(index) {
     const r = await guard(() => rpc("manual_import", index, out.value));
     if (!r) return;
     out.value = "";
-    toast(t("Importados {n} párrafos.", { n: fmt(r.guardados) }) + (r.faltan.length ? " " + t("Faltaron: {ids}.", { ids: r.faltan.join(", ") }) : ""));
+    toast(t("Importados: {parrafos}.", { parrafos: plural(r.guardados, t("párrafo"), t("párrafos")) }) + (r.faltan.length ? " " + t("Faltaron: {ids}.", { ids: r.faltan.join(", ") }) : ""));
     if (thenCopy && r.parrafos_pendientes) await copyNext();
     await refreshSummary();
     const panel = $("#manual-panel");
@@ -1830,7 +1833,7 @@ function renderSearch(v) {
       h("button", { class: "small ghost", onclick: async () => {
         const r = await guard(() => rpc("undo_replace"));
         if (!r) return;
-        toast(t("Reemplazo deshecho en {n} párrafos.", { n: fmt(r.restaurados) }) + (r.omitidos ? " " + t("{n} ya se habían vuelto a editar y no se tocaron.", { n: fmt(r.omitidos) }) : ""));
+        toast(t("Reemplazo deshecho en {parrafos}.", { parrafos: plural(r.restaurados, t("párrafo"), t("párrafos")) }) + (r.omitidos ? " " + t("{n} ya se habían vuelto a editar y no se tocaron.", { n: fmt(r.omitidos) }) : ""));
         await refreshSummary();
         run();
       } }, t("Deshacer"))));
@@ -1951,7 +1954,8 @@ function renderExport(v) {
   const missing = s.progreso.total - s.progreso.hechos;
   put(v,
     pageHead(t("Paso 5 de 5"), t("Exportar"), t("Genera el EPUB con la traducción. Conserva imágenes, índice y estilos del original; la portada puede ser la original o una nueva con el título traducido.")),
-    missing ? h("div", { class: "warn" }, t("Aún faltan {missing} párrafos: en el EPUB quedarán en el idioma original.", { missing: fmt(missing) })) : null,
+    missing ? h("div", { class: "warn" }, missing === 1 ? t("Aún falta 1 párrafo: en el EPUB quedará en el idioma original.")
+      : t("Aún faltan {missing} párrafos: en el EPUB quedarán en el idioma original.", { missing: fmt(missing) })) : null,
     qaBox,
     metadataCard(),
     coverCard(),

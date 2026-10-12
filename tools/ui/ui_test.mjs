@@ -88,7 +88,7 @@ await page.click("button:text-is('Copiar bloque')");
 await page.waitForSelector("text=Bloque copiado: párrafos");
 await page.fill("#manual-panel textarea", '<seg id="0">Mirela durmió <g1>profundamente</g1> esa noche.</seg>\n<seg id="1">El viento siguió soplando del norte.</seg>');
 await page.click("button:text-is('Solo importar')");
-await page.waitForSelector("text=Importados 2");
+await page.waitForSelector("text=Importados: 2");
 await shot("08-manual");
 
 step("exportar");

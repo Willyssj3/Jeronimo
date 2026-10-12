@@ -48,7 +48,7 @@ await page.fill("#manual-panel textarea", [
   '<seg id="2">—Los barcos llegan tarde —dijo el farero<x1/>.</seg>',
 ].join("\n"));
 await page.click("button:text-is('Solo importar')");
-await page.waitForSelector("text=Importados 3");
+await page.waitForSelector("text=Importados: 3");
 await page.click("button:has-text('Leer y escuchar')");
 await page.waitForSelector(".reader-page");
 console.log("voces:", await page.locator(".voice-bar select >> nth=0").locator("option").allTextContents());

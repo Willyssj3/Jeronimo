@@ -34,6 +34,7 @@ def test_glossary_names_and_common_nouns():
     assert kinds(issues) == [(0, "glosario"), (2, "glosario"), (4, "glosario")]
     assert "quedó sin traducir" in issues[0].mensaje
     assert "«red»" in issues[1].mensaje
+    assert issues[2].mensaje == "«Mirela» no aparece en la traducción."
 
 
 def test_identical_leftovers_and_opening_marks():

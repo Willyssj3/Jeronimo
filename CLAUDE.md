@@ -52,11 +52,16 @@ convertir MOBI/AZW3.
 - `python tools/servidor_prueba.py CARPETA [PUERTO] [es|en|pt]`: abre la app en modo navegador con
   una **IA simulada** (no gasta nada) y libros inventados (`book.epub`, `ref_en.epub`,
   `ref_es.epub` dentro de CARPETA). Imprime la dirección con su token.
-- `python tools/ui/correr.py ui_test.mjs`: corre una prueba de pantalla de `tools/ui/` (Playwright)
-  contra ese servidor; las capturas quedan en `pruebas-ui/` (ignorada por Git). Requiere
-  `npm install -g playwright` y `npx playwright install chromium`.
+- `python tools/ui/correr.py ui_test.mjs [PUERTO] [es|en|pt]`: corre una prueba de pantalla de
+  `tools/ui/` (Playwright) contra ese servidor; las capturas quedan en `pruebas-ui/` (ignorada por
+  Git). Requiere `npm install -g playwright` y `npx playwright install chromium`.
 - Pruebas incluidas: flujo completo (`ui_test`), revisión, calidad, buscar y reemplazar, borrar
-  traducción, perfiles, paquete para Proyectos, lectura, modo manual con plan, formatos de entrada.
+  traducción, perfiles, paquete para Proyectos, lectura, modo manual con plan, formatos de entrada
+  (todas en español, buscan los botones por su texto).
+- `ui_idiomas_test.mjs` recorre las 38 pantallas en el idioma pedido (`correr.py
+  ui_idiomas_test.mjs 8765 en`), busca los botones por su texto traducido y avisa de textos de la
+  interfaz que sigan en español (lista en `pruebas-ui/ui_idiomas_test-en/textos-a-revisar.txt`).
+  Córrela en `en` y `pt` cada vez que agregues textos o pantallas.
 
 ## Arquitectura
 
@@ -99,7 +104,11 @@ convertir MOBI/AZW3.
 - Las traducciones están en `src/traductor/locales/en.json` y `pt.json` (las usan Python y la
   interfaz). `python tools/i18n_claves.py` dice qué falta o sobra; `python tools/i18n_claves.py
   faltan en` lista lo que falta en JSON. `tests/test_i18n.py` falla si falta alguna traducción o si
-  no coinciden los `{marcadores}`.
+  no coinciden los `{marcadores}`. Inglés de EE. UU. y portugués de Brasil (con «você»); en ambos
+  las comillas son “ ” en lugar de « ».
+- Los números con unidad o plural van con `plural(n, t("párrafo"), t("párrafos"))` dentro del
+  texto (`t("Traducción borrada: {parrafos}.", { parrafos: … })`), no «{n} párrafos», para que
+  no salga «1 párrafos».
 - El idioma se elige en la barra superior y se guarda en los ajustes; la primera vez se usa el del
   sistema. Las notas que escribe la IA (dudas, motivos de la revisión, guía, resúmenes) salen en el
   idioma elegido en ese momento.
@@ -121,20 +130,20 @@ Versión publicada: **0.2.0**. Desde entonces se agregaron (sin publicar todaví
 calidad, buscar y reemplazar, vista de lectura con voz, segunda pasada con IA, paquete para
 Proyectos de los chats, perfiles de autor, portada traducida (o una imagen propia), datos del libro
 editables, exportar a Word y PDF, convertir desde Word/TXT/FB2/MOBI/AZW3, OCR para PDF escaneados,
-modo manual con elección de modelo y plan, borrar la traducción de un capítulo y la interfaz en
-inglés y portugués.
+modo manual con elección de modelo y plan, borrar la traducción de un capítulo y la interfaz
+completa en inglés y portugués (verificada pantalla por pantalla el 12/10/2026).
 
 Pendiente, en este orden (lo fijó el usuario):
-1. **Interfaz en inglés y portugués**: los textos ya están marcados, pero faltan las traducciones
-   en sí: `src/traductor/locales/en.json` y `pt.json` todavía no existen (811 textos cada uno; hasta
-   entonces fallan 4 pruebas de `tests/test_i18n.py`). Escribirlas, comprobar con
-   `python tools/i18n_claves.py`, abrir la app en inglés y en portugués con
-   `tools/servidor_prueba.py`, recorrer todas las pantallas con capturas y corregir textos que
-   sigan en español o que queden mal. Agregar al README cómo cambiar el idioma.
-2. **Actualizar el README** con todas las funciones nuevas desde la 0.2.0 y capturas actuales
-   (siempre con libros inventados).
-3. **Preparar la versión 0.3.0** (número y notas en `docs/versiones/v0.3.0.md`) y preguntarle al
+1. **Actualizar el README** con todas las funciones nuevas desde la 0.2.0 y capturas actuales
+   (siempre con libros inventados). Ya explica cómo cambiar el idioma.
+2. **Preparar la versión 0.3.0** (número y notas en `docs/versiones/v0.3.0.md`) y preguntarle al
    usuario antes de publicarla (ver «Publicar una versión»).
+3. **Corregir los avisos de calidad con un clic** (después de la 0.3.0; el usuario eligió el
+   diseño): botón «Corregir» en cada aviso y uno para todos los de un tipo. Lo mecánico (espacios,
+   signos ¿ ¡, guion → raya, nombres con dos grafías) se corrige al instante y se puede deshacer;
+   lo que necesita entender el texto (glosario, palabras sin traducir, números, omisiones) lo
+   propone la IA para ese párrafo y se acepta o descarta como en la revisión con IA (en modo
+   manual, se copia al chat).
 4. **Instalador firmado** (sin el aviso de Windows SmartScreen): en pausa hasta que el usuario lo
    pida. Plan: el usuario solicita el certificado gratuito para proyectos de código abierto de
    SignPath Foundation (verificar los requisitos actuales en signpath.org); después se agrega un

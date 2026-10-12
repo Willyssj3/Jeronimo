@@ -165,7 +165,11 @@ class Checker:
 
         for entry in self.glossary:
             if entry.source_re.search(src) and not entry.respected(tgt):
-                left = tr(" (quedó sin traducir)") if entry.term != entry.translation and entry.source_re.search(tgt) else ""
+                if norm(entry.term) == norm(entry.translation):
+                    # Un nombre que se deja igual: falta en la traducción (quizá quedó como «él»).
+                    add("glosario", tr("«{term}» no aparece en la traducción.", term=entry.term))
+                    continue
+                left = tr(" (quedó sin traducir)") if entry.source_re.search(tgt) else ""
                 add("glosario", tr("«{term}» debería traducirse «{translation}»{left}.", term=entry.term, translation=entry.translation, left=left))
 
         src_words = WORD_RE.findall(src)

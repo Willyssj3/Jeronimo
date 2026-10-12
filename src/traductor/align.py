@@ -18,6 +18,8 @@ import math
 import re
 from dataclasses import asdict, dataclass
 
+from .i18n import N_
+
 # Movimientos (párrafos de origen, párrafos de destino) y su probabilidad a priori.
 MOVES: list[tuple[int, int, float]] = [
     (1, 1, 0.89),
@@ -85,7 +87,7 @@ class AlignStats:
     tgt_paragraphs: int
     one_to_one: float  # fracción de pares 1-1
     coverage: float    # fracción del texto original emparejado
-    quality: str       # "buena" | "aceptable" | "baja"
+    quality: str       # "buena" | "aceptable" | "baja" (se traduce al mostrarla)
 
 
 def _letters(s: str) -> int:
@@ -126,7 +128,7 @@ def align(src: list[str], tgt: list[str], *, progress=None) -> tuple[list[Pair],
     coverage = covered / sum(ls)
     good = [p for p in pairs if p.cost < 6.0]
     ratio_good = len(good) / max(1, len(pairs))
-    quality = "buena" if coverage > 0.85 and ratio_good > 0.8 else "aceptable" if coverage > 0.6 else "baja"
+    quality = N_("buena") if coverage > 0.85 and ratio_good > 0.8 else N_("aceptable") if coverage > 0.6 else N_("baja")
     return pairs, AlignStats(len(pairs), n, m, round(one, 3), round(coverage, 3), quality)
 
 

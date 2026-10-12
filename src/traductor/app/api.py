@@ -446,7 +446,7 @@ class Api:
             stats = p.add_reference(original.strip().strip('"'), translation.strip().strip('"'),
                                     name=name or None,
                                     progress=lambda f: task.progress(f, tr("Emparejando párrafos…")))
-            task.log(tr("Listo: {pairs} pares, cobertura {coverage:.0%}, calidad {quality}.", pairs=stats.pairs, coverage=stats.coverage, quality=stats.quality))
+            task.log(tr("Listo: {pairs} pares, cobertura {coverage:.0%}, calidad {quality}.", pairs=stats.pairs, coverage=stats.coverage, quality=tr(stats.quality)))
             return asdict(stats)
 
         self._tasks.start(N_("Emparejar referencia"), run, "emparejar")

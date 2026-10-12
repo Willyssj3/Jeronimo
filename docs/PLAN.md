@@ -87,10 +87,13 @@ el coste estimado.
    - Probar el instalador en equipos reales. ✅ Nombre (Jerónimo) y logo propios.
    - Emparejamiento con *embeddings* multilingües (opcional, vía Ollama o API)
      para libros con estructura muy distinta.
-   - Pasada de revisión por una segunda IA (consistencia y glosario).
+   - ✅ Pasada de revisión por una segunda IA (consistencia y glosario).
    - ✅ Modo manual con cualquier chat de IA, también para preparar la guía
      de estilo, el glosario y el análisis del libro.
    - Traducción del texto alternativo de imágenes.
    - ✅ Conversión de PDF con texto a EPUB (`pdf2epub.py`).
-   - OCR para PDF escaneados; más formatos de entrada (DOCX, TXT) y salida (DOCX, PDF).
-   - Interfaz en inglés.
+   - ✅ OCR para PDF escaneados; más formatos de entrada (DOCX, TXT, FB2, MOBI/AZW3) y salida
+     (DOCX, PDF).
+   - ✅ Interfaz en inglés y portugués.
+   - Corregir los avisos del control de calidad con un clic (directo para lo mecánico, con IA
+     para el resto), después de la versión 0.3.0.

@@ -67,6 +67,24 @@ La app usa el componente WebView2 de Microsoft Edge, incluido en Windows 10 y
 
 <p align="center"><img src="docs/captura-inicio.png" alt="Pantalla de inicio de Jerónimo" width="880"></p>
 
+## Idioma de la app: español, inglés o portugués
+
+Para cambiar el idioma de la app, elige **Español**, **English** o
+**Português** en el menú de idioma de la barra superior (arriba a la derecha).
+El cambio es inmediato y queda guardado para la próxima vez. La primera vez,
+la app usa el idioma de Windows (si es otro distinto de esos tres, inglés).
+
+Las notas que escribe la IA (dudas, motivos de las correcciones, guía de
+estilo, resúmenes) salen en el idioma que tengas elegido en ese momento. El
+idioma al que se traduce el libro es otra cosa: se elige al crear el proyecto,
+en «Traducir al».
+
+> *English:* the app is also available in English: choose **English** in the
+> language menu at the top right.
+>
+> *Português:* o app também está em português: escolha **Português** no menu
+> de idioma, no canto superior direito.
+
 ## Modo manual: con cualquier chat de IA, sin clave de API
 
 Si no puedes o no quieres conectar una API, Jerónimo funciona igual con el
