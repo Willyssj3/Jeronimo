@@ -17,8 +17,10 @@ su traducción oficial (pares de referencia). Repositorio público: https://gith
 - No abras pull requests ni publiques versiones sin que el usuario lo pida explícitamente.
 - Antes de decir que algo está listo: `pytest -q` sin fallos y, si tocaste la interfaz, pruébala
   (ver «Probar la interfaz») y muéstrale capturas.
-- Lleva el avance en el tablero de Trello del proyecto (el usuario te pasa el link): una tarjeta por
-  tarea, movida a «En curso» al empezar y a «Hecho» al terminar.
+- Lleva el avance en el tablero de Trello del proyecto (el usuario te pasa el link), con las listas
+  «Pendiente», «En curso», «Hecho» e «Ideas»: una tarjeta por tarea (descripción simple y lista de
+  pasos), movida a «En curso» al empezar y a «Hecho» al terminar. Las tareas nuevas que surjan,
+  como tarjeta nueva.
 
 ## Reglas que no se rompen
 
@@ -36,7 +38,7 @@ git clone -b claude/book-translation-spanish-vr753r https://github.com/Willyssj3
 cd TraductordeLibros
 py -3.12 -m venv .venv
 .venv\Scripts\activate
-pip install -e .[dev]
+pip install -e .[dev,escritorio]   # «escritorio»: ventana propia y claves en el almacén de Windows
 pytest -q
 jeronimo              # abre la app (ventana); «jeronimo --navegador» la abre en el navegador
 ```
@@ -122,17 +124,22 @@ editables, exportar a Word y PDF, convertir desde Word/TXT/FB2/MOBI/AZW3, OCR pa
 modo manual con elección de modelo y plan, borrar la traducción de un capítulo y la interfaz en
 inglés y portugués.
 
-Pendiente:
-1. **Interfaz en inglés y portugués**: terminar de verificar. Correr `python tools/i18n_claves.py`
-   (completar lo que falte), abrir la app en inglés y en portugués con `tools/servidor_prueba.py`,
-   recorrer todas las pantallas con capturas y corregir textos que sigan en español o que queden
-   mal. Agregar al README cómo cambiar el idioma.
-2. **Publicar la versión 0.3.0** cuando el usuario lo apruebe (ver «Publicar una versión»).
-3. **Instalador firmado** (sin el aviso de Windows SmartScreen): pendiente, en pausa. Plan: el
-   usuario solicita el certificado gratuito para proyectos de código abierto de SignPath
-   Foundation (verificar los requisitos actuales en signpath.org); después se agrega un paso de
-   firma al flujo de GitHub con los secretos que den. Explicarle los pasos de forma simple.
-4. **Actualizar el README** con todas las funciones nuevas y capturas actuales.
-5. Mejoras posibles: los títulos que agrega el conversor de PDF a EPUB («Notas», «Índice»,
-   «Portada») salen en español aunque el libro esté en otro idioma; las reglas de rayas de diálogo
-   y signos de apertura del control de calidad son solo para español.
+Pendiente, en este orden (lo fijó el usuario):
+1. **Interfaz en inglés y portugués**: los textos ya están marcados, pero faltan las traducciones
+   en sí: `src/traductor/locales/en.json` y `pt.json` todavía no existen (811 textos cada uno; hasta
+   entonces fallan 4 pruebas de `tests/test_i18n.py`). Escribirlas, comprobar con
+   `python tools/i18n_claves.py`, abrir la app en inglés y en portugués con
+   `tools/servidor_prueba.py`, recorrer todas las pantallas con capturas y corregir textos que
+   sigan en español o que queden mal. Agregar al README cómo cambiar el idioma.
+2. **Actualizar el README** con todas las funciones nuevas desde la 0.2.0 y capturas actuales
+   (siempre con libros inventados).
+3. **Preparar la versión 0.3.0** (número y notas en `docs/versiones/v0.3.0.md`) y preguntarle al
+   usuario antes de publicarla (ver «Publicar una versión»).
+4. **Instalador firmado** (sin el aviso de Windows SmartScreen): en pausa hasta que el usuario lo
+   pida. Plan: el usuario solicita el certificado gratuito para proyectos de código abierto de
+   SignPath Foundation (verificar los requisitos actuales en signpath.org); después se agrega un
+   paso de firma al flujo de GitHub con los secretos que den. Explicarle los pasos de forma simple.
+5. **Proponer mejoras** con opciones para elegir. Ideas ya anotadas: los títulos que agrega el
+   conversor de PDF a EPUB («Notas», «Índice», «Portada») salen en español aunque el libro esté en
+   otro idioma; las reglas de rayas de diálogo y signos de apertura del control de calidad son
+   solo para español, pero el libro se puede traducir a otros idiomas (`LANG_NAMES` en `prompts.py`).
