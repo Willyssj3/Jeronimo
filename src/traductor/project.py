@@ -70,6 +70,22 @@ def read_json(path: Path, default=None):
         return default
 
 
+_FRONT_MATTER_RE = re.compile(
+    r"©|\bISBN\b|\bcopyright\b|\bdep[oó]sito legal\b|\btel\.|\bfax\b|www\.|https?://|@\w|"
+    r"\bprinted in\b|\bimpreso en\b|\ball rights reserved\b|\breservados todos\b|"
+    r"\bfirst published\b|\bpublished by\b|\bt[ií]tulo original\b|\bebook edition\b",
+    re.IGNORECASE)
+
+
+def is_front_matter(src: str, tgt: str) -> bool:
+    """Créditos, direcciones o avisos legales: no sirven como ejemplo de estilo
+    y suelen quedar mal emparejados porque cada edición tiene los suyos."""
+    if _FRONT_MATTER_RE.search(src) or _FRONT_MATTER_RE.search(tgt):
+        return True
+    ratio = (len(tgt) + 1) / (len(src) + 1)
+    return not 0.4 <= ratio <= 2.5
+
+
 @dataclass
 class ChapterInfo:
     index: int
@@ -272,7 +288,7 @@ class Project:
             with open(path, encoding="utf-8") as f:
                 for line in f:
                     p = json.loads(line)
-                    if p.get("cost", 0) <= max_cost:
+                    if p.get("cost", 0) <= max_cost and not is_front_matter(p["src"], p["tgt"]):
                         out.append(Example(p["src"], p["tgt"], info.get("nombre", folder.name)))
         return out
 

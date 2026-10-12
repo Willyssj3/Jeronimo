@@ -144,8 +144,11 @@ class Translator:
     def build_user(self, data: dict, chunk: list[dict]) -> str:
         plain = "\n".join(inline.strip_marks(s["src"]) for s in chunk)
         glossary = self.relevant_glossary(plain)
-        examples = self.index.search(plain, k=self.options.examples, max_chars=self.options.example_chars,
-                                     must_include=[g["termino"] for g in glossary])
+        # Bloques de solo títulos (índices, encabezados): los ejemplos no aportan.
+        titles_only = all(len(inline.strip_marks(s["src"])) < 60 for s in chunk)
+        examples = [] if titles_only else self.index.search(
+            plain, k=self.options.examples, max_chars=self.options.example_chars,
+            must_include=[g["termino"] for g in glossary])
         return prompts.translate_user(
             segments=[(s["n"], s["src"]) for s in chunk],
             glossary=glossary,

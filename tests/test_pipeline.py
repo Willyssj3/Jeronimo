@@ -178,3 +178,21 @@ def test_manual_block_size(project):
 def test_cannot_approve_incomplete_chapter(project):
     with pytest.raises(ValueError):
         project.set_approved(0)
+
+
+def test_front_matter_pairs_are_not_examples():
+    from traductor.project import is_front_matter
+
+    assert is_front_matter("Translation copyright © 2014 by Someone", "28002 Madrid Tel.: 91 000 00 00")
+    assert is_front_matter("First published in English in 2014", "La edición en lengua española se publica")
+    assert is_front_matter("A long paragraph " * 20, "Corto.")
+    assert not is_front_matter("Mirela mended the nets in the morning.", "Mirela remendaba las redes por la mañana.")
+
+
+def test_titles_only_block_has_no_examples(project):
+    tr = Translator(project, None)
+    data = project.load_chapter(0)
+    user = tr.build_user(data, data["segmentos"][:1])  # solo el título del capítulo
+    assert "# Reference examples" not in user
+    user = tr.build_user(data, data["segmentos"][1:3])
+    assert "# Reference examples" in user
