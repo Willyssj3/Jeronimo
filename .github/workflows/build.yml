@@ -45,6 +45,7 @@ jobs:
         run: |
           if (!(Test-Path dist\Jeronimo\Jeronimo.exe)) { exit 1 }
           if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter logo.svg)) { exit 1 }
+          if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter EBGaramond.woff2)) { exit 1 }
       - name: Crear el instalador (Inno Setup)
         run: |
           choco install innosetup -y --no-progress

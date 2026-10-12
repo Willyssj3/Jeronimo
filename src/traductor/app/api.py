@@ -590,7 +590,7 @@ class Api:
         saved, missing = translator.manual_import(index, text)
         if saved == 0:
             raise ValueError("No encontré párrafos traducidos en lo que pegaste. Copia la respuesta completa "
-                             "(en claude.ai, con el botón «Copiar» del bloque de código).")
+                             "(con el botón «Copiar» del bloque de código del chat).")
         return dict({"guardados": saved, "faltan": missing}, **self._manual_state(translator, index))
 
     # -- preparación en modo manual (copiar y pegar en cualquier chat) ----------

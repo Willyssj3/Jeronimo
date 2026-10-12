@@ -30,7 +30,7 @@ jeronimo = "traductor.app.main:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"traductor.app" = ["ui/*"]
+"traductor.app" = ["ui/*", "ui/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

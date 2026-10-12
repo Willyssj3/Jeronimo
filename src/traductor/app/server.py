@@ -16,6 +16,8 @@ from urllib.parse import urlparse
 
 from .api import Api, Bridge
 
+mimetypes.add_type("font/woff2", ".woff2")  # tipografía de la interfaz
+
 UI_DIR = Path(__file__).resolve().parent / "ui"
 
 

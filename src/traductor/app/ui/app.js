@@ -51,8 +51,33 @@ function h(tag, attrs, ...children) {
   return el;
 }
 
+/* Como Element.append, pero ignora null/false (append los convertiría en el texto «null»). */
+function put(parent, ...children) {
+  for (const c of children.flat()) {
+    if (c !== null && c !== undefined && c !== false) parent.append(c);
+  }
+}
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const view = () => $("#view");
+
+/* Iconos de línea propios (24×24, trazo con currentColor). */
+const ICONS = {
+  libro: '<path d="M12 6.6C10 5.1 7 4.6 3.5 5v13.2c3.5-.4 6.5.1 8.5 1.6 2-1.5 5-2 8.5-1.6V5C17 4.6 14 5.1 12 6.6z"/><path d="M12 6.6v13.2"/>',
+  carpeta: '<path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5v8.3A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18z"/>',
+  pdf: '<path d="M6.5 3.5h7.5l4.5 4.5v11A1.5 1.5 0 0 1 17 20.5H6.5A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M14 3.5V8h4.5"/><path d="M8.5 12.5h7M8.5 16h5"/>',
+  pluma: '<path d="M20 3.8C13.2 4.2 8.6 8.9 7.6 16.4c6.8-.9 11.4-5.4 12.4-12.6z"/><path d="M4 20l9-9"/><path d="M10.4 13.6h4.2"/>',
+};
+const icon = (name) => h("span", { class: "card-icon", html: `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>` });
+
+function pageHead(eyebrow, title, lead) {
+  return h("header", { class: "page-head" },
+    eyebrow ? h("div", { class: "eyebrow" }, eyebrow) : null,
+    h("h1", {}, title),
+    lead ? h("p", { class: "lead" }, lead) : null);
+}
+
+const cardHead = (iconName, title) => h("div", { class: "card-head" }, icon(iconName), h("h2", {}, title));
 const fmt = (n) => Number(n || 0).toLocaleString("es-ES");
 const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
 
@@ -266,7 +291,12 @@ function setChrome() {
   $("#btn-quit").hidden = !(state.info && state.info.modo === "navegador");
   $("#sidebar").hidden = !open;
   $("#btn-close-project").hidden = !open;
-  $("#project-name").textContent = open ? `— ${state.summary.nombre}` : "";
+  $("#project-name").textContent = open ? state.summary.titulo || state.summary.nombre : "";
+  if (open) {
+    const prog = state.summary.progreso;
+    $("#side-pct").textContent = `${pct(prog.hechos, prog.total)} %`;
+    $("#side-bar").style.width = `${pct(prog.hechos, prog.total)}%`;
+  }
   for (const a of document.querySelectorAll("#sidebar a")) {
     a.classList.toggle("active", a.dataset.view === state.view || (state.view === "revision" && a.dataset.view === "capitulos"));
   }
@@ -299,7 +329,7 @@ async function render() {
   setChrome();
   const v = view();
   v.textContent = "";
-  v.scrollTop = 0;
+  $("#main").scrollTop = 0;
   if (!state.summary) return renderHome(v);
   const views = { resumen: renderSummary, referencias: renderReferences, ia: renderAI, conocimiento: renderKnowledge,
     capitulos: renderChapters, revision: renderReview, exportar: renderExport };
@@ -321,12 +351,20 @@ function renderHome(v) {
     h("option", { value: "pt-BR" }, "Portugués de Brasil"),
     h("option", { value: "pt-PT" }, "Portugués de Portugal"));
 
-  v.append(
-    h("h1", {}, "Traduce libros conservando el estilo oficial"),
-    h("p", { class: "lead" }, "Crea un proyecto con el EPUB que quieres traducir, añade libros del mismo autor junto con su traducción oficial y la IA imitará la voz de ese traductor."),
+  put(v,
+    h("section", { class: "hero" },
+      h("img", { class: "hero-logo", src: "logo.svg", alt: "", width: 108, height: 108 }),
+      h("div", {},
+        h("div", { class: "eyebrow" }, "Libre, gratuito y de código abierto"),
+        h("h1", {}, "Traduce libros con la voz de su traductor oficial"),
+        h("p", { class: "tagline" }, "Enséñale a la IA cómo se tradujeron otros libros del mismo autor y revisa la traducción capítulo a capítulo, conservando el formato del libro.")),
+      h("ol", { class: "how" },
+        h("li", {}, h("strong", {}, "Elige el libro"), h("span", {}, "Un EPUB sin DRM, o conviértelo antes desde PDF.")),
+        h("li", {}, h("strong", {}, "Enséñale el estilo"), h("span", {}, "Otros libros del autor junto con su traducción oficial.")),
+        h("li", {}, h("strong", {}, "Traduce y revisa"), h("span", {}, "Con tu IA o copiando en cualquier chat, capítulo a capítulo.")))),
     h("div", { class: "grid2" },
       h("div", { class: "card stack" },
-        h("h2", { style: "margin-top:0" }, "Nuevo proyecto"),
+        cardHead("libro", "Nuevo proyecto"),
         h("div", { class: "field" }, h("label", {}, "Libro a traducir ", h("span", { class: "hint" }, "(EPUB sin DRM)")), pathField("new-epub", "C:\\Libros\\mi-libro.epub")),
         h("div", { class: "row" },
           h("div", { class: "field", style: "flex:1" }, h("label", {}, "Traducir al"), langSelect),
@@ -334,6 +372,7 @@ function renderHome(v) {
         h("div", { class: "field" }, h("label", {}, "Carpeta del proyecto ", h("span", { class: "hint" }, "(opcional)")),
           pathField("new-folder", info.carpeta_por_defecto + "\\…", "carpeta")),
         h("div", { class: "row end" }, h("button", {
+          class: "gold",
           onclick: async () => {
             const epub = $("#new-epub").value.trim();
             if (!epub) return toast("Elige el EPUB que quieres traducir.", true);
@@ -342,7 +381,7 @@ function renderHome(v) {
           },
         }, "Crear proyecto"))),
       h("div", { class: "card stack" },
-        h("h2", { style: "margin-top:0" }, "Abrir proyecto"),
+        cardHead("carpeta", "Abrir proyecto"),
         h("div", { class: "field" }, h("label", {}, "Carpeta del proyecto"), pathField("open-folder", info.carpeta_por_defecto + "\\mi-libro", "carpeta")),
         h("div", { class: "row end" }, h("button", {
           onclick: async () => {
@@ -354,15 +393,16 @@ function renderHome(v) {
         }, "Abrir")),
         h("h3", {}, "Recientes"),
         info.recientes.length
-          ? h("div", {}, info.recientes.map((r) => h("div", { class: "row", style: "padding:6px 0;border-bottom:1px solid var(--border)" },
-            h("div", { style: "flex:1;min-width:0" }, h("strong", {}, r.nombre), h("div", { class: "muted small" }, r.carpeta)),
+          ? h("div", {}, info.recientes.map((r) => h("div", { class: "recent" },
+            h("div", { style: "flex:1;min-width:0" }, h("strong", {}, r.nombre), h("div", { class: "muted small", style: "overflow-wrap:anywhere" }, r.carpeta)),
             r.existe ? h("button", { class: "small ghost", onclick: async () => {
               const s = await guard(() => rpc("open_project", r.carpeta));
               if (s) await opened(s);
             } }, "Abrir") : h("span", { class: "badge" }, "no encontrado"))))
           : h("p", { class: "muted" }, "Todavía no hay proyectos."))),
     pdfCard(),
-    h("p", { class: "muted small" }, `Jerónimo ${info.version} · modo ${info.modo}. Usa solo libros que tengas derecho a traducir.`));
+    h("div", { class: "home-foot" }, h("div", { class: "ornament" }, h("span")),
+      h("p", { class: "muted small" }, `Jerónimo ${info.version} · modo ${info.modo} · Usa solo libros que tengas derecho a traducir.`)));
 }
 
 function pdfCard() {
@@ -370,7 +410,7 @@ function pdfCard() {
   const r = last && last.resultado;
   const busy = state.task && state.task.activa;
   return h("div", { class: "card stack" },
-    h("h2", { style: "margin-top:0" }, "Convertir PDF a EPUB"),
+    cardHead("pdf", "Convertir PDF a EPUB"),
     h("p", { class: "muted" }, "Para tus propios PDF con texto seleccionable (no escaneados): quita encabezados y números de página, une las palabras cortadas, detecta capítulos, cursivas y notas al pie, y crea un EPUB listo para tu lector o para traducir."),
     h("div", { class: "field" }, h("label", {}, "PDF"), pathField("pdf-in", "C:\\Libros\\mi-libro.pdf", "pdf")),
     h("div", { class: "field" }, h("label", {}, "Guardar EPUB en ", h("span", { class: "hint" }, "(opcional; por defecto, junto al PDF)")),
@@ -380,7 +420,7 @@ function pdfCard() {
       if (!pdf) return toast("Elige el PDF que quieres convertir.", true);
       startTask(() => rpc("convert_pdf", pdf, $("#pdf-out").value.trim()));
     } }, "Convertir")),
-    r ? h("div", { class: "card", style: "background:var(--panel-2)" },
+    r ? h("div", { class: "result" },
       h("p", { style: "margin-top:0" }, h("strong", {}, "EPUB creado: "), r.ruta),
       h("p", { class: "small" }, `«${r.titulo}»${r.autor ? " · " + r.autor : ""} · ${r.paginas} páginas · ${r.capitulos} capítulos · ${r.notas} notas · ${r.lineas_quitadas} encabezados o números de página quitados`
         + (r.paginas_omitidas.length ? ` · índice impreso omitido (pág. ${r.paginas_omitidas.join(", ")})` : "")),
@@ -426,11 +466,13 @@ function renderSummary(v) {
     { done: prog.total > 0 && prog.hechos === prog.total, title: "Traducir y revisar", text: `${fmt(prog.hechos)} de ${fmt(prog.total)} párrafos · ${prog.caps_aprobados} de ${prog.caps_total} documentos aprobados`, go: "capitulos" },
     { done: false, title: "Exportar el EPUB", text: "Genera el libro traducido o una edición bilingüe.", go: "exportar" },
   ];
-  v.append(
-    h("h1", {}, s.titulo || s.nombre),
-    h("p", { class: "lead" }, `${s.autor || "Autor desconocido"} · ${s.idioma_origen} → ${s.idioma_destino} · ${fmt(prog.palabras)} palabras`),
+  const nextStep = steps.find((st) => !st.done) || steps[steps.length - 1];
+  put(v,
+    pageHead("Resumen del proyecto", s.titulo || s.nombre,
+      `${s.autor || "Autor desconocido"} · ${s.idioma_origen} → ${s.idioma_destino} · ${fmt(prog.palabras)} palabras`),
     h("div", { class: "card" },
-      h("div", { class: "row" }, h("strong", {}, `Progreso: ${pct(prog.hechos, prog.total)} %`), h("div", { class: "progress" }, h("div", { style: `width:${pct(prog.hechos, prog.total)}%` }))),
+      h("div", { class: "row" }, h("strong", {}, `Progreso: ${pct(prog.hechos, prog.total)} %`), h("div", { class: "progress" }, h("div", { style: `width:${pct(prog.hechos, prog.total)}%` })),
+        h("button", { class: "gold", onclick: () => go(nextStep.go) }, `Seguir: ${nextStep.title}`)),
       h("ol", { class: "steps" }, steps.map((st) => h("li", { class: st.done ? "done" : "" },
         h("div", { class: "grow" }, h("strong", {}, st.title), h("div", { class: "muted small" }, st.text)),
         h("button", { class: "small ghost", onclick: () => go(st.go) }, "Ir"))))),
@@ -450,12 +492,12 @@ function renderSummary(v) {
 
 function renderReferences(v) {
   const s = state.summary;
-  v.append(
-    h("h1", {}, "Libros de referencia"),
-    h("p", { class: "lead" }, "Añade otros libros del mismo autor con su traducción oficial (el original y la traducción, ambos en EPUB). La app los empareja párrafo a párrafo y aprende cómo traduce ese traductor: nombres, diálogos, tono y vocabulario."),
+  put(v,
+    pageHead("Paso 1 de 5", "Libros de referencia", "Añade otros libros del mismo autor con su traducción oficial (el original y la traducción, ambos en EPUB). La app los empareja párrafo a párrafo y aprende cómo traduce ese traductor: nombres, diálogos, tono y vocabulario."),
     s.referencias.length
       ? h("div", {}, s.referencias.map((r) => h("div", { class: "card row" },
-        h("div", { style: "flex:1" }, h("strong", {}, r.nombre),
+        icon("libro"),
+        h("div", { style: "flex:1" }, h("h3", { style: "margin:0 0 2px" }, r.nombre),
           h("div", { class: "muted small" }, `${r.titulo_original} ↔ ${r.titulo_traduccion}`),
           h("div", { class: "small" }, `${fmt(r.estadisticas.pairs)} pares · cobertura ${pct(r.estadisticas.coverage, 1)} % · `,
             h("span", { class: "badge " + (r.estadisticas.quality === "buena" ? "ok" : r.estadisticas.quality === "baja" ? "danger" : "warn") }, `calidad ${r.estadisticas.quality}`))),
@@ -466,11 +508,11 @@ function renderReferences(v) {
         } }, "Quitar"))))
       : h("div", { class: "card empty-state" }, "Aún no hay libros de referencia."),
     h("div", { class: "card stack" },
-      h("h2", { style: "margin-top:0" }, "Añadir libro de referencia"),
+      cardHead("pluma", "Añadir libro de referencia"),
       h("div", { class: "field" }, h("label", {}, "Original ", h("span", { class: "hint" }, "(mismo idioma que el libro a traducir)")), pathField("ref-src", "C:\\Libros\\otro-libro-EN.epub")),
       h("div", { class: "field" }, h("label", {}, "Traducción oficial"), pathField("ref-tgt", "C:\\Libros\\otro-libro-ES.epub")),
       h("div", { class: "field" }, h("label", {}, "Nombre ", h("span", { class: "hint" }, "(opcional)")), h("input", { id: "ref-name", type: "text" })),
-      h("div", { class: "row end" }, h("button", { onclick: () => {
+      h("div", { class: "row end" }, h("button", { class: s.referencias.length ? "" : "gold", onclick: () => {
         const a = $("#ref-src").value.trim();
         const b = $("#ref-tgt").value.trim();
         if (!a || !b) return toast("Elige los dos EPUB: el original y su traducción oficial.", true);
@@ -512,7 +554,7 @@ function renderAI(v) {
     const sameKind = current === cfg.tipo;
     const datalist = h("datalist", { id: "model-list" },
       current === "anthropic" ? state.info.modelos_claude.map(([id, label]) => h("option", { value: id }, label)) : []);
-    fields.append(
+    put(fields,
       h("div", { class: "help" }, PROVIDER_HELP[current] || ""),
       current === "manual" ? null : h("div", { class: "field" }, h("label", {}, "Modelo"),
         h("div", { class: "path" },
@@ -540,12 +582,11 @@ function renderAI(v) {
           const r = await guard(() => rpc("test_provider"));
           if (r) toast(`Conexión correcta con ${r.modelo}. Respuesta: «${r.respuesta}»`);
         } }, "Probar conexión"),
-        h("button", { onclick: async () => { if (await saveAI(current)) toast("Ajustes de IA guardados."); } }, "Guardar")));
+        h("button", { class: "gold", onclick: async () => { if (await saveAI(current)) toast("Ajustes de IA guardados."); } }, "Guardar")));
   };
   draw();
-  v.append(
-    h("h1", {}, "Inteligencia artificial"),
-    h("p", { class: "lead" }, "Elige qué IA traduce. Cada persona usa la suya: tu clave se guarda en el almacén seguro de Windows, nunca dentro del proyecto."),
+  put(v,
+    pageHead("Paso 2 de 5", "Inteligencia artificial", "Elige qué IA traduce. Cada persona usa la suya: tu clave se guarda en el almacén seguro de Windows, nunca dentro del proyecto. Sin clave, el modo manual funciona con cualquier chat."),
     h("div", { class: "card" }, list),
     h("div", { class: "card" }, fields),
     h("div", { class: "card" }, h("strong", {}, "Coste estimado de lo pendiente: "), costText(s.estimacion),
@@ -585,15 +626,15 @@ async function renderKnowledge(v) {
     if (tab === "estilo") {
       const ta = h("textarea", { class: "big", spellcheck: "true" });
       ta.value = k.estilo;
-      body.append(h("p", { class: "muted" }, "La IA sigue esta guía en cada fragmento. Puedes editarla libremente (formato Markdown)."), ta,
+      put(body, h("p", { class: "muted" }, "La IA sigue esta guía en cada fragmento. Puedes editarla libremente (formato Markdown)."), ta,
         h("div", { class: "row end" }, h("button", { onclick: async () => { if (await guard(() => rpc("save_style", ta.value))) { k.estilo = ta.value; toast("Guía de estilo guardada."); } } }, "Guardar")));
     } else if (tab === "glosario") {
-      body.append(glossaryEditor(k));
+      put(body, glossaryEditor(k));
     } else if (tab === "sinopsis") {
       const syn = h("textarea", { style: "min-height:160px" });
       syn.value = k.sinopsis;
       const areas = {};
-      body.append(h("p", { class: "muted" }, "Contexto que la IA recibe con cada fragmento: quién es quién, género de los personajes, tono…"),
+      put(body, h("p", { class: "muted" }, "Contexto que la IA recibe con cada fragmento: quién es quién, género de los personajes, tono…"),
         h("label", {}, "Sinopsis del libro"), syn,
         h("h3", {}, "Resumen de cada capítulo"),
         k.capitulos.map((c) => {
@@ -616,14 +657,14 @@ async function renderKnowledge(v) {
         ["terminos", "Proponer términos", "Propone cómo traducir los términos del libro que aún no están en el glosario.", true],
       ];
       if (manual) {
-        body.append(manualPrepPanel(checks));
+        put(body, manualPrepPanel(checks));
         return;
       }
-      body.append(
+      put(body,
         h("div", { class: "card" }, checks.map(([id, title, desc, enabled]) => h("label", { class: "row", style: "font-weight:500;align-items:flex-start;padding:6px 0" },
           h("input", { type: "checkbox", value: id, class: "prep", checked: enabled && !(id === "estilo" && k.estilo), disabled: !enabled }),
           h("span", {}, h("strong", {}, title), h("br"), h("span", { class: "muted small" }, enabled ? desc : "Necesita al menos un libro de referencia."))))),
-        h("div", { class: "row end" }, h("button", { onclick: () => {
+        h("div", { class: "row end" }, h("button", { class: "gold", onclick: () => {
           const steps = [...document.querySelectorAll("input.prep:checked")].map((c) => c.value);
           if (!steps.length) return toast("Marca al menos un paso.", true);
           startTask(() => rpc("prepare", steps));
@@ -632,8 +673,7 @@ async function renderKnowledge(v) {
   };
   drawTabs();
   drawBody();
-  v.append(h("h1", {}, "Estilo y glosario"),
-    h("p", { class: "lead" }, "Todo lo que la IA sabe del libro y del estilo que debe imitar. Revisa y corrige lo que quieras: tus cambios mandan."),
+  put(v, pageHead("Paso 3 de 5", "Estilo y glosario", "Todo lo que la IA sabe del libro y del estilo que debe imitar. Revisa y corrige lo que quieras: tus cambios mandan."),
     tabs, body);
 }
 
@@ -644,7 +684,7 @@ function manualPrepPanel(checks) {
     const st = await guard(() => rpc("manual_prep_status"));
     if (st === undefined) return;
     if (!st) {
-      box.append(
+      put(box,
         h("p", {}, "Modo manual: cada paso genera unas instrucciones con todo el contexto necesario. Las copias en tu chat de IA (Claude, ChatGPT, Gemini, Copilot…), y pegas aquí la respuesta. Hazlos en este orden:"),
         h("div", { class: "card" }, checks.map(([id, title, desc, enabled], i) => h("div", { class: "row", style: "padding:8px 0;border-bottom:1px solid var(--border)" },
           h("div", { style: "flex:1" }, h("strong", {}, `${i + 1}. ${title}`), h("br"), h("span", { class: "muted small" }, enabled ? desc : "Necesita al menos un libro de referencia.")),
@@ -680,7 +720,8 @@ function manualPrepPanel(checks) {
       await draw();
       if (thenCopy) await copy();
     };
-    box.append(h("div", { class: "card manual stack" },
+    put(box, h("div", { class: "card manual stack" },
+      h("div", { class: "eyebrow", style: "margin:0" }, "Modo manual"),
       h("h3", { style: "margin-top:0" }, `${st.nombre}: parte ${st.hechos + 1} de ${st.total}`),
       h("p", { class: "muted small", style: "margin:0" }, st.etiqueta),
       h("div", { class: "row" }, h("button", { onclick: copy }, "Copiar instrucciones"), info),
@@ -692,7 +733,7 @@ function manualPrepPanel(checks) {
         } }, "Cancelar paso"),
         h("div", { class: "spacer" }),
         h("button", { class: "ghost", onclick: () => doImport(false) }, "Solo importar"),
-        h("button", { onclick: () => doImport(true) }, "Importar y copiar la siguiente"))));
+        h("button", { class: "gold", onclick: () => doImport(true) }, "Importar y copiar la siguiente"))));
   };
   draw();
   return box;
@@ -734,19 +775,18 @@ function renderChapters(v) {
   const chapters = s.capitulos.filter((c) => c.total > 0);
   const busy = state.task && state.task.activa;
   const manual = s.proveedor.tipo === "manual";
-  v.append(
-    h("h1", {}, "Capítulos"),
-    h("p", { class: "lead" }, manual
-      ? "Modo manual: en cada capítulo copias los bloques a tu chat de claude.ai y pegas las respuestas. Lo aprobado sirve de ejemplo para los siguientes."
+  put(v,
+    pageHead("Paso 4 de 5", "Capítulos", manual
+      ? "Modo manual: en cada capítulo copias los bloques a tu chat de IA y pegas las respuestas. Lo aprobado sirve de ejemplo para los siguientes."
       : s.revision === "capitulo"
         ? "Traduce de a un capítulo, revísalo y apruébalo: lo aprobado sirve de ejemplo para los siguientes."
         : "Puedes traducir todo de corrido y revisar al final."),
     h("div", { class: "row" },
-      manual ? h("button", { onclick: () => {
+      manual ? h("button", { class: "gold", onclick: () => {
         const next = chapters.find((c) => c.status !== "omitido" && c.done < c.total);
         if (next) go("revision", next.index); else toast("No quedan capítulos pendientes.");
       } }, "Continuar en modo manual") : null,
-      manual ? null : h("button", { disabled: busy, onclick: () => startTask(() => rpc("translate", "siguiente", null)) }, "Traducir el siguiente capítulo"),
+      manual ? null : h("button", { class: "gold", disabled: busy, onclick: () => startTask(() => rpc("translate", "siguiente", null)) }, "Traducir el siguiente capítulo"),
       manual ? null : h("button", { class: "ghost", disabled: busy, onclick: async () => {
         const est = s.estimacion;
         const ok = await modal(h("div", {}, h("h3", {}, "Traducir todo lo pendiente"),
@@ -755,7 +795,7 @@ function renderChapters(v) {
         if (ok) startTask(() => rpc("translate", "todo", null));
       } }, "Traducir todo lo pendiente"),
       h("span", { class: "muted small" }, `Pendiente: ${fmt(s.estimacion.palabras)} palabras · ${costText(s.estimacion)}`)),
-    h("div", { class: "card", style: "padding:6px 10px;margin-top:16px" },
+    h("div", { class: "card", style: "padding:6px 12px;margin-top:18px" },
       h("table", {},
         h("tr", {}, h("th", {}, "Capítulo"), h("th", {}, "Palabras"), h("th", {}, "Estado"), h("th", {}, "Progreso"), h("th", {}, "")),
         chapters.map((c) => h("tr", { class: c.status === "omitido" ? "skipped" : "" },
@@ -763,13 +803,13 @@ function renderChapters(v) {
           h("td", { class: "num" }, fmt(c.words)),
           h("td", {}, statusBadge(c.status)),
           h("td", { style: "width:180px" }, h("div", { class: "row" }, h("div", { class: "progress" }, h("div", { style: `width:${pct(c.done, c.total)}%` })), h("span", { class: "small muted" }, `${c.done}/${c.total}`))),
-          h("td", { class: "row", style: "justify-content:flex-end" },
+          h("td", {}, h("div", { class: "row", style: "justify-content:flex-end;flex-wrap:nowrap" },
             h("button", { class: "small ghost", onclick: () => go("revision", c.index) }, "Revisar"),
             c.status !== "omitido" && c.done < c.total && !manual ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", c.index)) }, "Traducir") : null,
             h("button", { class: "small ghost", title: "No traducir este documento (créditos, publicidad…)", onclick: async () => {
               const sum = await guard(() => rpc("set_skipped", c.index, c.status !== "omitido"));
               if (sum) { state.summary = sum; render(); }
-            } }, c.status === "omitido" ? "Incluir" : "Omitir")))))));
+            } }, c.status === "omitido" ? "Incluir" : "Omitir"))))))));
 }
 
 /* ---------------------------------------------------------------- revisión */
@@ -810,11 +850,12 @@ async function renderReview(v) {
   drawRows();
 
   const approved = data.aprobado;
-  v.append(
+  put(v,
     h("div", { class: "review-head" },
       h("div", { class: "row" },
         h("button", { class: "small ghost", onclick: () => go("capitulos") }, "‹ Capítulos"),
-        h("h1", { style: "margin:0;flex:1" }, data.titulo),
+        h("div", { style: "flex:1;min-width:0" }, h("div", { class: "eyebrow", style: "margin:0 0 2px" }, "Revisión"),
+          h("h1", { style: "margin:0" }, data.titulo)),
         statusBadge(data.estado)),
       h("div", { class: "row", style: "margin-top:10px" },
         h("span", { class: "muted" }, `${data.hechos} de ${data.total} párrafos traducidos`),
@@ -822,7 +863,7 @@ async function renderReview(v) {
         filterSel,
         !manualMode && data.hechos < data.total && !data.omitir ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", index)) }, "Traducir lo pendiente") : null,
         h("button", { class: "small ghost", onclick: () => { const p = $("#manual-panel"); p.hidden = !p.hidden; } }, "Modo manual"),
-        h("button", { class: "small " + (approved ? "ghost" : ""), disabled: data.hechos < data.total || data.bloqueado, onclick: async () => {
+        h("button", { class: "small " + (approved ? "ghost" : "gold"), disabled: data.hechos < data.total || data.bloqueado, onclick: async () => {
           const d = await guard(() => rpc("set_approved", index, !approved));
           if (!d) return;
           await refreshSummary();
@@ -831,7 +872,8 @@ async function renderReview(v) {
         } }, approved ? "Quitar aprobación" : "Aprobar capítulo"),
         next ? h("button", { class: "small ghost", onclick: () => go("revision", next.index) }, "Siguiente ›") : null),
       data.bloqueado ? h("div", { class: "warn", style: "margin-top:8px" }, "Este capítulo se está traduciendo. La vista se actualiza sola; podrás editar al terminar.") : null,
-      data.resumen ? h("details", { style: "margin-top:8px" }, h("summary", { class: "muted small" }, "Resumen del capítulo"), h("p", { class: "small" }, data.resumen)) : null),
+      data.resumen ? h("details", { style: "margin-top:8px" }, h("summary", { class: "muted small" }, "Resumen del capítulo"), h("p", { class: "small" }, data.resumen)) : null,
+      h("div", { class: "seg-cols" }, h("span", {}, `Original · ${state.summary.idioma_origen}`), h("span", {}, `Traducción · ${state.summary.idioma_destino}`))),
     manualPanel(index),
     rows);
 }
@@ -924,7 +966,8 @@ function manualPanel(index) {
     }
     info.textContent = `Bloque copiado: párrafos ${p.ids[0]}–${p.ids[p.ids.length - 1]} (${fmt(p.caracteres)} caracteres).`;
     if (await copyText(p.texto)) {
-      toast("Bloque copiado. Pégalo en tu chat de claude.ai.");
+      const chat = (state.info.chats || []).find((c) => c.id === (state.summary.chat_manual || "claude"));
+      toast(`Bloque copiado. Pégalo en ${chat && chat.id !== "otro" ? chat.nombre : "tu chat de IA"}.`);
     } else {
       const ta = h("textarea", { class: "big" });
       ta.value = p.texto;
@@ -949,9 +992,11 @@ function manualPanel(index) {
   };
 
   const panel = h("div", { id: "manual-panel", class: "card manual stack", hidden: state.summary.proveedor.tipo !== "manual" },
-    h("h3", { style: "margin-top:0" }, "Modo manual: con cualquier chat de IA"),
+    h("div", { class: "eyebrow", style: "margin:0" }, "Modo manual"),
+    h("h3", { style: "margin-top:0" }, "Traduce con cualquier chat de IA"),
     h("div", { class: "row" }, counter, h("div", { class: "spacer" }),
-      h("label", { style: "margin:0" }, "Chat"), chatSel, h("label", { style: "margin:0" }, "Bloque"), sizeSel),
+      h("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, h("label", { style: "margin:0" }, "Chat"), chatSel),
+      h("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, h("label", { style: "margin:0" }, "Bloque"), sizeSel)),
     h("ol", { class: "small", style: "margin:0;padding-left:1.2em;line-height:1.6" },
       h("li", {}, "Pulsa «Copiar bloque» y pégalo en tu chat de IA. Cada bloque lleva todo el contexto: guía de estilo, glosario, ejemplos oficiales, resumen del capítulo y los párrafos anteriores; puedes usar el mismo chat o uno nuevo."),
       h("li", {}, "Cuando termine, copia la respuesta con el botón de copiar del bloque de código (o selecciona todo su texto)."),
@@ -960,7 +1005,7 @@ function manualPanel(index) {
     out,
     h("div", { class: "row end" },
       h("button", { class: "ghost", onclick: () => doImport(false) }, "Solo importar"),
-      h("button", { onclick: () => doImport(true) }, "Importar y copiar el siguiente")));
+      h("button", { class: "gold", onclick: () => doImport(true) }, "Importar y copiar el siguiente")));
   refreshCounter();
   return panel;
 }
@@ -975,16 +1020,15 @@ function renderExport(v) {
     const r = await guard(() => rpc("export", bilingual));
     result.textContent = "";
     if (!r) return;
-    result.append(h("div", { class: "card" },
+    put(result, h("div", { class: "result" },
       h("p", {}, h("strong", {}, "Listo: "), r.ruta),
       r.total_avisos ? h("p", { class: "warn" }, `${r.total_avisos} párrafo(s) con avisos de formato; revisa: ${r.avisos.slice(0, 5).join(" · ")}`) : null,
       h("button", { class: "ghost", onclick: () => rpc("open_folder", r.ruta) }, "Abrir carpeta")));
   };
   const title = h("input", { type: "text", value: s.titulo_traducido || "", placeholder: s.titulo });
   const missing = s.progreso.total - s.progreso.hechos;
-  v.append(
-    h("h1", {}, "Exportar"),
-    h("p", { class: "lead" }, "Genera el EPUB con la traducción. Conserva portada, imágenes, índice y estilos del original."),
+  put(v,
+    pageHead("Paso 5 de 5", "Exportar", "Genera el EPUB con la traducción. Conserva portada, imágenes, índice y estilos del original."),
     missing ? h("div", { class: "warn" }, `Aún faltan ${fmt(missing)} párrafos: en el EPUB quedarán en el idioma original.`) : null,
     h("div", { class: "card stack" },
       h("div", { class: "field" }, h("label", {}, "Título de la edición traducida"),
@@ -993,7 +1037,7 @@ function renderExport(v) {
           if (sum) { state.summary = sum; toast("Título guardado."); }
         } }, "Guardar"))),
       h("div", { class: "row" },
-        h("button", { onclick: () => run(false) }, "Generar EPUB traducido"),
+        h("button", { class: "gold", onclick: () => run(false) }, "Generar EPUB traducido"),
         h("button", { class: "ghost", onclick: () => run(true) }, "Generar EPUB bilingüe"))),
     result);
 }

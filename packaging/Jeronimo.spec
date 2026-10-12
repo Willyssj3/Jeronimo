@@ -4,7 +4,7 @@ import os
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 datas = (
-    collect_data_files("traductor", includes=["app/ui/*"])
+    collect_data_files("traductor", includes=["app/ui/*", "app/ui/fonts/*"])
     + collect_data_files("pdfminer")
     + collect_data_files("pypdfium2_raw")
     + collect_data_files("pypdfium2")
