@@ -272,6 +272,43 @@ $("#btn-task-log").onclick = async () => {
     { ok: "Cerrar", cancel: null });
 };
 
+/* ---------------------------------------------------------------- versiones nuevas */
+
+/* Notas de versión en Markdown sencillo → nodos de texto (sin HTML). */
+function releaseNotes(text) {
+  const box = h("div", { class: "release-notes small" });
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const head = line.match(/^#+\s*(.*)$/);
+    const item = line.match(/^[-*]\s+(.*)$/);
+    const clean = (s) => s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1");
+    if (head) box.appendChild(h("strong", { style: "display:block;margin-top:6px" }, clean(head[1])));
+    else if (item) box.appendChild(h("div", { style: "padding-left:1em;text-indent:-.8em" }, "• " + clean(item[1])));
+    else box.appendChild(h("div", {}, clean(line)));
+  }
+  return box;
+}
+
+async function checkUpdate() {
+  const r = await rpc("check_update").catch(() => null);
+  if (!r) return;
+  const btn = $("#btn-update");
+  btn.textContent = `Nueva versión ${r.version}`;
+  btn.title = "Hay una versión nueva de Jerónimo";
+  btn.hidden = false;
+  btn.onclick = async () => {
+    const ok = await modal(h("div", {},
+      h("div", { class: "eyebrow" }, "Actualización disponible"),
+      h("h3", {}, `Jerónimo ${r.version}`),
+      h("p", {}, `Tienes la versión ${state.info.version}. Descarga el instalador nuevo y ejecútalo: se instala encima `
+        + "y conserva tus proyectos, ajustes y claves."),
+      r.notas ? releaseNotes(r.notas) : null), { ok: "Descargar", cancel: "Ahora no" });
+    if (ok) await guard(() => rpc("open_url", r.url));
+    else btn.hidden = true;
+  };
+}
+
 /* ---------------------------------------------------------------- navegación */
 
 async function refreshSummary() {
@@ -1059,4 +1096,5 @@ function renderExport(v) {
   }
   await render();
   pollTask();
+  checkUpdate();
 })();

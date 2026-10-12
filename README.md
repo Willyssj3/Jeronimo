@@ -34,13 +34,16 @@ ninguna, en **modo manual**, copiando y pegando en cualquier chat de IA.
 
 ## Instalar en Windows
 
-1. Entra en la pestaña **Actions** del repositorio, abre la última ejecución
-   correcta de «Pruebas e instalador de Windows» y descarga el artefacto
-   **Jeronimo-Windows** (o, cuando haya versiones publicadas, la
-   sección **Releases**).
-2. Descomprime y ejecuta `Jeronimo-…-instalador.exe`. No necesita
-   permisos de administrador. También hay una versión portátil en ZIP.
-3. Abre **Jerónimo** desde el menú Inicio.
+1. Entra en **[la última versión publicada](https://github.com/Willyssj3/TraductordeLibros/releases/latest)**
+   y descarga `Jeronimo-…-instalador.exe` (en «Assets»). No hace falta
+   cuenta de GitHub.
+2. Ejecútalo. No necesita permisos de administrador. Si Windows muestra
+   «Windows protegió su PC», pulsa «Más información» y luego «Ejecutar de
+   todas formas» (el instalador todavía no está firmado). También hay una
+   versión portátil en ZIP.
+3. Abre **Jerónimo** desde el menú Inicio. Cuando salga una versión nueva,
+   la app te avisa; el instalador nuevo se instala encima y conserva tus
+   proyectos, ajustes y claves.
 
 La app usa el componente WebView2 de Microsoft Edge, incluido en Windows 10 y
 11. Si faltara, se abre automáticamente en el navegador.

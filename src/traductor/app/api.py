@@ -12,11 +12,12 @@ import subprocess
 import sys
 import threading
 import traceback
+import webbrowser
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
-from .. import __version__, inline, knowledge
+from .. import __version__, inline, knowledge, updates
 from ..epub import EpubBook, EpubError
 from ..pdf2epub import PdfError
 from ..inline import localname
@@ -171,6 +172,34 @@ class Api:
             raise ValueError("Hay una tarea en curso. Detenla antes de salir.")
         threading.Timer(0.5, os._exit, [0]).start()
         return True
+
+    # -- versiones nuevas ---------------------------------------------------------
+
+    def check_update(self, force: bool = False) -> dict | None:
+        """La versión publicada más reciente, si es más nueva que esta.
+
+        Consulta GitHub como mucho una vez al día; sin conexión, no avisa."""
+        settings = self._settings()
+        saved = settings.get("actualizacion") or {}
+        today = date.today().isoformat()
+        latest = saved.get("ultima")
+        if force or saved.get("consultado") != today:
+            try:
+                latest = updates.latest_release()
+            except Exception:  # sin internet, GitHub no responde…: no molesta a nadie
+                latest = None
+            else:
+                settings["actualizacion"] = {"consultado": today, "ultima": latest}
+                self._save_settings(settings)
+        if latest and updates.is_newer(latest.get("version", ""), __version__):
+            return latest
+        return None
+
+    def open_url(self, url: str) -> bool:
+        """Abre en el navegador una página del proyecto (descargas, ayuda)."""
+        if not (url == updates.REPO_URL or url.startswith(updates.REPO_URL + "/")):
+            raise ValueError("Solo se pueden abrir páginas del proyecto Jerónimo.")
+        return bool(webbrowser.open(url))
 
     def open_folder(self, path: str) -> bool:
         target = Path(path)
