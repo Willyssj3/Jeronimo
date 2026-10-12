@@ -71,6 +71,7 @@ jobs:
           if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter EBGaramond-SemiBold.ttf)) { exit 1 }
           if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter en.json)) { exit 1 }
           if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter pt.json)) { exit 1 }
+          if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter logo-firma.png)) { exit 1 }
       # Una sola descarga, con nombre fijo: el enlace .../releases/latest/download/Jeronimo-Windows.zip
       # siempre baja la última versión, y la app la reconoce para actualizarse sola.
       - name: Versión portable (ZIP)

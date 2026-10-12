@@ -15,6 +15,7 @@ import html
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import credit as signature
 from . import inline
 from .epub import EpubBook
 from .inline import localname
@@ -225,6 +226,21 @@ def export_docx(project, out: Path, *, bilingual: bool = False, progress=None) -
                 fill(paragraph, block.runs)
         if progress:
             progress((k + 1) / max(1, len(chapters)))
+    if project.signed:  # página final «Traducido con Jerónimo»
+        heading, desc = signature.texts(project.target_lang)
+        doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+        logo = doc.add_paragraph()
+        logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        logo.paragraph_format.space_before = Cm(6)
+        logo.add_run().add_picture(str(signature.LOGO), width=Cm(2.6))
+        for text, bold, size in ((heading, True, 13), (desc, False, 10), (signature.URL_TEXT, False, 10)):
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.line_spacing = 1.15
+            p.paragraph_format.space_before = Pt(6)
+            run = p.add_run(text)
+            run.bold = bold or None
+            run.font.size = Pt(size)
     out.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out))
     return out
@@ -336,6 +352,19 @@ def export_pdf(project, out: Path, *, page: str = "a5", progress=None) -> Path:
             after_heading = False
         if progress:
             progress((k + 1) / max(1, len(chapters)) * 0.8)
+    if project.signed:  # página final «Traducido con Jerónimo»
+        from reportlab.platypus import Image
+
+        heading_text, desc = signature.texts(project.target_lang)
+        centered = ParagraphStyle("firma", fontName="EBG", fontSize=size * 0.9, leading=size * 1.3,
+                                  alignment=TA_CENTER, spaceBefore=size * 0.6)
+        story += [NextPageTemplate("portadilla"), PageBreak(), Spacer(1, pagesize[1] * 0.24),
+                  Image(str(signature.LOGO), width=24 * mm, height=24 * mm),
+                  Paragraph(html.escape(heading_text),
+                            ParagraphStyle("firma-t", parent=centered, fontName="EBG-B", fontSize=size * 1.2,
+                                           leading=size * 1.6, spaceBefore=size * 1.4)),
+                  Paragraph(html.escape(desc), centered),
+                  Paragraph(f'<link href="{signature.URL}">{signature.URL_TEXT}</link>', centered)]
     out.parent.mkdir(parents=True, exist_ok=True)
     doc.build(story)
     if progress:

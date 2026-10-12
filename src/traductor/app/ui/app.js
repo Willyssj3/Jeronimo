@@ -2013,6 +2013,13 @@ function renderExport(v) {
     coverCard(),
     h("div", { class: "card stack" },
       cardHead("libro", t("Generar el EPUB")),
+      h("label", { class: "row", style: "gap:8px;font-weight:500;margin:0" },
+        h("input", { type: "checkbox", id: "firma", checked: s.firma, onchange: async (e) => {
+          const sum = await guard(() => rpc("set_settings", { firma: e.target.checked }));
+          if (sum) state.summary = sum; else e.target.checked = !e.target.checked;
+        } }),
+        h("span", {}, t("Agregar al final una página «Traducido con Jerónimo», con el logo y el enlace del proyecto"),
+          h("span", { class: "muted small" }, " " + t("(también en Word y PDF)")))),
       h("div", { class: "row" },
         h("button", { class: "gold", onclick: () => run(false) }, t("Generar EPUB traducido")),
         h("button", { class: "ghost", onclick: () => run(true) }, t("Generar EPUB bilingüe")))),

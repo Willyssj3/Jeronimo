@@ -493,6 +493,8 @@ class Api:
         if any(k in values for k in ("chat_manual", "modelo_manual", "plan_manual")) and "bloque_manual" not in values:
             opts["bloque_manual"] = recommended_block(opts.get("chat_manual") or "claude", opts.get("modelo_manual", ""),
                                                       opts.get("plan_manual", "pago"))
+        if "firma" in values:
+            p.config["firma"] = bool(values["firma"])
         if "bloques_livianos" in values:
             p.config.setdefault("opciones", {})["bloques_livianos"] = bool(values["bloques_livianos"])
         if "bloque_manual" in values:
@@ -532,6 +534,7 @@ class Api:
                                                     (cfg.get("opciones") or {}).get("plan_manual") or "pago"),
             "bloques_livianos": bool((cfg.get("opciones") or {}).get("bloques_livianos")),
             "perfil_autor": cfg.get("perfil_autor", ""),
+            "firma": p.signed,
             "paquete": self._package_state(p),
             "proveedor": prov,
             "tiene_clave": kind in LOCAL_KINDS or bool(get_api_key(kind)),

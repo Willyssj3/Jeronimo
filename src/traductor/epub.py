@@ -550,12 +550,22 @@ class EpubBook:
         return None
 
     def render_opf(self, *, target_lang: str, bilingual: bool, title: str | None,
-                   new_cover: dict | None = None, metadata: dict | None = None) -> bytes:
+                   new_cover: dict | None = None, metadata: dict | None = None,
+                   extra_items: list[dict] | None = None) -> bytes:
         tree = parse_xml(self.read(self.opf_path))
         root = tree.getroot()
         meta = root.find("opf:metadata", NS)
         if metadata and meta is not None:
             _apply_metadata(root, meta, metadata)
+        # Archivos nuevos (la página con la firma de Jerónimo y su logo); los marcados «spine», al final del libro.
+        manifest, spine = root.find("opf:manifest", NS), root.find("opf:spine", NS)
+        for it in extra_items or []:
+            el = etree.SubElement(manifest, f"{{{NS['opf']}}}item")
+            el.set("id", it["id"])
+            el.set("href", it["href"])
+            el.set("media-type", it["media_type"])
+            if it.get("spine") and spine is not None:
+                etree.SubElement(spine, f"{{{NS['opf']}}}itemref").set("idref", it["id"])
         if new_cover is not None:
             # Portada añadida: nuevo elemento del manifiesto marcado como portada (EPUB 3 y 2).
             manifest = root.find("opf:manifest", NS)
@@ -597,15 +607,28 @@ class EpubBook:
 
     def write(self, out_path: str | Path, translations: dict[int, list[str | None]], *,
               target_lang: str, bilingual: bool = False, title: str | None = None, cover=None,
-              metadata: dict | None = None) -> list[str]:
+              metadata: dict | None = None, signature: bool = False) -> list[str]:
         """Escribe el EPUB traducido. ``translations`` va de índice de
         documento a la lista de traducciones (marcadas) por segmento; ``None``
         deja el segmento original. ``cover``, si se da, es una función
         ``(formato, imagen_original, proporción) -> bytes`` que crea la portada
-        nueva. Devuelve avisos para revisión."""
+        nueva. ``signature`` agrega al final la página «Traducido con Jerónimo».
+        Devuelve avisos para revisión."""
         warnings: list[str] = []
         modified: dict[str, bytes] = {}
         added: dict[str, bytes] = {}
+        extra_items: list[dict] = []
+        if signature and "jeronimo-firma" not in self.manifest:  # un libro ya firmado no se firma dos veces
+            from . import credit
+
+            epub3 = (self.opf.getroot().get("version") or "").startswith("3")
+            files = (("jeronimo-firma", "jeronimo-firma.xhtml", "application/xhtml+xml",
+                      credit.xhtml(target_lang, epub3=epub3)),
+                     ("jeronimo-logo", "jeronimo-logo.png", "image/png", credit.logo_png()))
+            for ident, href, media_type, data in files:
+                added[posixpath.join(self.opf_dir, href) if self.opf_dir else href] = data
+                extra_items.append({"id": ident, "href": href, "media_type": media_type,
+                                    "spine": ident == "jeronimo-firma"})
         new_cover = None
         if cover is not None:
             item = self.cover_item()
@@ -634,7 +657,7 @@ class EpubBook:
             modified[doc.path] = data
             warnings.extend(warns)
         modified[self.opf_path] = self.render_opf(target_lang=target_lang, bilingual=bilingual, title=title,
-                                                  new_cover=new_cover, metadata=metadata)
+                                                  new_cover=new_cover, metadata=metadata, extra_items=extra_items)
 
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)

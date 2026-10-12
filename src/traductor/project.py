@@ -441,8 +441,14 @@ class Project:
         with EpubBook(self.book_path) as book:
             warnings = book.write(out, translations, target_lang=self.target_lang,
                                   bilingual=bilingual, title=None if bilingual else title,
-                                  cover=None if bilingual else self.cover_maker(), metadata=edited)
+                                  cover=None if bilingual else self.cover_maker(), metadata=edited,
+                                  signature=self.signed)
         return out, warnings
+
+    @property
+    def signed(self) -> bool:
+        """Si los libros exportados llevan al final la página «Traducido con Jerónimo» (sí, salvo que se quite)."""
+        return bool(self.config.get("firma", True))
 
     @property
     def own_cover_path(self) -> Path:
