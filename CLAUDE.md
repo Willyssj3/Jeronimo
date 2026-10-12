@@ -155,20 +155,16 @@ convertir MOBI/AZW3.
 
 ## Estado y pendientes
 
-Versión publicada: **0.3.0** (12/10/2026; la primera portable, con actualización automática,
-interfaz en inglés y portugués y la página final «Traducido con Jerónimo» al exportar). El README
-es la presentación para compartir (botón de descarga directa `docs/boton-descargar.svg`, capturas
-de `docs/capturas/` hechas con `tools/capturas_readme.py`, preguntas frecuentes); el usuario eligió
-solo el README, sin página web aparte.
-
-Lista para publicar (falta el OK del usuario): **0.3.1**, con la corrección de los avisos de calidad
-con un clic (`qa_fix.py`; notas en `docs/versiones/v0.3.1.md`). Lo mecánico (signos ¿ ¡,
-espacios, guion → raya) se corrige al instante y se puede deshacer; los nombres con dos grafías se
-unifican eligiendo cuál queda; lo demás (glosario, párrafo igual al original, palabras sin
-traducir, números, omisiones, formato perdido, estilo de los diálogos) lo propone la IA y se acepta
-o descarta (en modo manual, se copia al chat). Es la primera versión que les llega a todos por la
-actualización automática: después de publicarla, conviene comprobar que la 0.3.0 la ofrece y se
-actualiza bien.
+Versión publicada: **0.3.1** (12/10/2026). La 0.3.0 fue la primera portable, con actualización
+automática, interfaz en inglés y portugués y la página final «Traducido con Jerónimo» al exportar;
+la 0.3.1 suma la corrección de los avisos de calidad con un clic (`qa_fix.py`): lo mecánico (signos
+¿ ¡, espacios, guion → raya) al instante y con deshacer, los nombres con dos grafías se unifican
+eligiendo cuál queda, y lo demás lo propone la IA para aceptar o descartar (en modo manual, se
+copia al chat). La actualización de la 0.3.0 a la 0.3.1 se probó de verdad (la 0.3.0 descargada de
+GitHub encontró la 0.3.1, se actualizó y se volvió a abrir sola). El README es la presentación
+para compartir (botón de descarga directa `docs/boton-descargar.svg`, capturas de `docs/capturas/`
+hechas con `tools/capturas_readme.py`, preguntas frecuentes); el usuario eligió solo el README, sin
+página web aparte.
 
 Pendiente, en este orden (lo fijó el usuario):
 1. **Versión 0.4.0** (lo eligió el usuario): (a) al crear el proyecto, dar ya las instrucciones para
