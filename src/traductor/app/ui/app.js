@@ -82,6 +82,7 @@ function pageHead(eyebrow, title, lead) {
 const cardHead = (iconName, title) => h("div", { class: "card-head" }, icon(iconName), h("h2", {}, title));
 const fmt = (n) => Number(n || 0).toLocaleString("es-ES");
 const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+const plural = (n, one, many) => (n === 1 ? `1 ${one}` : `${fmt(n)} ${many}`);
 
 function toast(msg, isError = false) {
   const el = h("div", { class: isError ? "error" : "" }, msg);
@@ -371,7 +372,7 @@ async function render() {
   $("#main").scrollTop = 0;
   if (!state.summary) return renderHome(v);
   const views = { resumen: renderSummary, referencias: renderReferences, ia: renderAI, conocimiento: renderKnowledge,
-    capitulos: renderChapters, revision: renderReview, calidad: renderQuality, exportar: renderExport };
+    capitulos: renderChapters, revision: renderReview, calidad: renderQuality, buscar: renderSearch, exportar: renderExport };
   return (views[state.view] || renderSummary)(v);
 }
 
@@ -498,7 +499,7 @@ function renderSummary(v) {
   const provName = state.info.proveedores[s.proveedor.tipo] || s.proveedor.tipo;
   const steps = [
     { done: s.referencias.length > 0, title: "Libros de referencia", text: s.referencias.length
-      ? `${s.referencias.length} añadido(s): ${s.referencias.map((r) => r.nombre).join(", ")}`
+      ? `${plural(s.referencias.length, "añadido", "añadidos")}: ${s.referencias.map((r) => r.nombre).join(", ")}`
       : "Añade libros del autor con su traducción oficial (recomendado).", go: "referencias" },
     { done: s.tiene_clave && !!s.proveedor.tipo, title: "Inteligencia artificial", text: `${provName}${s.proveedor.modelo ? " · " + s.proveedor.modelo : ""}${s.tiene_clave ? "" : " · falta la clave"}`, go: "ia" },
     { done: s.estilo && s.glosario > 0, title: "Estilo y glosario", text: `Guía de estilo: ${s.estilo ? "sí" : "no"} · glosario: ${s.glosario} términos · sinopsis: ${s.sinopsis ? "sí" : "no"}`, go: "conocimiento" },
@@ -778,8 +779,36 @@ function manualPrepPanel(checks) {
   return box;
 }
 
+/* Tras cambiar traducciones del glosario, ofrece reemplazarlas en lo ya traducido. */
+async function offerGlossaryUpdate(before, after) {
+  const old = new Map(before.filter((e) => e.termino && e.traduccion).map((e) => [e.termino, e.traduccion.trim()]));
+  const changed = after.filter((e) => e.termino && e.traduccion && old.has(e.termino) && old.get(e.termino) !== e.traduccion.trim())
+    .map((e) => ({ termino: e.termino, antes: old.get(e.termino), ahora: e.traduccion.trim() }));
+  const found = [];
+  for (const c of changed.slice(0, 10)) {
+    const r = await rpc("find_text", c.antes, { palabra: true }).catch(() => null);
+    if (r && r.coincidencias) found.push(Object.assign(c, { veces: r.coincidencias, parrafos: r.parrafos }));
+  }
+  if (!found.length) return;
+  let pick = null;
+  const done = modal(h("div", {},
+    h("div", { class: "eyebrow" }, "Glosario"),
+    h("h3", {}, "¿Actualizar lo ya traducido?"),
+    h("p", {}, "Cambiaste traducciones que ya aparecen en párrafos traducidos:"),
+    found.map((c) => h("div", { class: "qa-row", style: "grid-template-columns:1fr auto" },
+      h("div", {}, h("strong", {}, c.termino), h("div", { class: "small" }, `«${c.antes}» → «${c.ahora}» · ${plural(c.veces, "vez", "veces")} en ${plural(c.parrafos, "párrafo", "párrafos")}`)),
+      h("button", { class: "small", onclick: () => { pick = c; $("#modal-cancel").click(); } }, "Revisar y reemplazar")))),
+  { ok: "Ahora no", cancel: null });
+  await done;
+  if (pick) {
+    state.searchPrefill = { buscar: pick.antes, reemplazar: pick.ahora, palabra: true };
+    go("buscar");
+  }
+}
+
 function glossaryEditor(k) {
   let rows = k.glosario.map((e) => Object.assign({}, e));
+  let original = k.glosario.map((e) => Object.assign({}, e));
   const search = h("input", { type: "search", placeholder: "Buscar término…", oninput: () => draw() });
   const table = h("table", {});
   const draw = () => {
@@ -802,7 +831,11 @@ function glossaryEditor(k) {
       h("button", { class: "ghost", onclick: () => { rows.unshift({ termino: "", traduccion: "", tipo: "", nota: "", origen: "usuario" }); search.value = ""; draw(); } }, "Añadir término"),
       h("button", { onclick: async () => {
         const n = await guard(() => rpc("save_glossary", rows));
-        if (n !== undefined) { toast(`Glosario guardado: ${n} términos.`); state.summary = await rpc("project_summary"); }
+        if (n === undefined) return;
+        toast(`Glosario guardado: ${n} términos.`);
+        state.summary = await rpc("project_summary");
+        await offerGlossaryUpdate(original, rows);
+        original = rows.map((e) => Object.assign({}, e));
       } }, "Guardar")),
     h("div", { class: "card", style: "padding:6px 10px" }, table));
 }
@@ -1170,6 +1203,128 @@ async function renderQuality(v) {
       h("span", { class: "muted small" }, `${fmt(r.parrafos)} párrafos revisados`),
       h("button", { class: "ghost small", onclick: () => render() }, "Volver a revisar")),
     chips, list);
+}
+
+/* ---------------------------------------------------------------- buscar y reemplazar */
+
+function renderSearch(v) {
+  const pre = state.searchPrefill || {};
+  state.searchPrefill = null;
+  // Lo que llega del glosario se busca siempre en la traducción y sin distinguir mayúsculas.
+  const last = pre.buscar !== undefined ? {} : state.lastSearch || {};
+  const query = h("input", { type: "search", placeholder: "Palabra o frase", value: pre.buscar ?? last.buscar ?? "",
+    onkeydown: (e) => { if (e.key === "Enter") run(); } });
+  const repl = h("input", { type: "text", placeholder: "Texto nuevo (opcional)", value: pre.reemplazar ?? last.reemplazar ?? "",
+    onkeydown: (e) => { if (e.key === "Enter") run(); } });
+  const caseBox = h("input", { type: "checkbox", checked: !!last.mayusculas });
+  const wordBox = h("input", { type: "checkbox", checked: pre.palabra ?? !!last.palabra });
+  const where = h("select", { style: "width:auto" },
+    h("option", { value: "traduccion", selected: last.en !== "original" }, "en la traducción"),
+    h("option", { value: "original", selected: last.en === "original" }, "en el original"));
+  const results = h("div", {});
+  const undoBox = h("div", {});
+  const options = () => ({ mayusculas: caseBox.checked, palabra: wordBox.checked, en: where.value });
+
+  const drawUndo = (info) => {
+    undoBox.textContent = "";
+    if (!info) return;
+    put(undoBox, h("div", { class: "note row", style: "padding:8px 12px;margin-top:12px" },
+      h("span", { style: "flex:1" }, `Último reemplazo: «${info.buscar}» → «${info.reemplazar}» en ${info.parrafos === 1 ? "1 párrafo" : `${fmt(info.parrafos)} párrafos`}.`),
+      h("button", { class: "small ghost", onclick: async () => {
+        const r = await guard(() => rpc("undo_replace"));
+        if (!r) return;
+        toast(`Reemplazo deshecho en ${fmt(r.restaurados)} párrafos.` + (r.omitidos ? ` ${fmt(r.omitidos)} ya se habían vuelto a editar y no se tocaron.` : ""));
+        await refreshSummary();
+        run();
+      } }, "Deshacer")));
+  };
+
+  async function run() {
+    const q = query.value.trim();
+    if (!q) return toast("Escribe qué quieres buscar.", true);
+    state.lastSearch = Object.assign({ buscar: q, reemplazar: repl.value }, options());
+    const r = await guard(() => rpc("find_text", q, options()));
+    if (!r) return;
+    drawResults(r);
+  }
+
+  function drawResults(r) {
+    results.textContent = "";
+    drawUndo(r.deshacer);
+    const inSource = where.value === "original";
+    if (!r.resultados.length) {
+      results.append(h("div", { class: "card empty-state" }, `No se encontró «${query.value.trim()}» ${inSource ? "en el original" : "en la traducción"}.`));
+      return;
+    }
+    const checks = [];
+    const count = h("strong", {});
+    const replaceBtn = h("button", { class: "gold", onclick: async () => {
+      const chosen = checks.filter((c) => c.box.checked).map((c) => [c.doc, c.n]);
+      if (!chosen.length) return toast("Marca al menos un párrafo.", true);
+      const newText = repl.value;
+      const ok = await modal(h("div", {},
+        h("div", { class: "eyebrow" }, "Reemplazar"),
+        h("p", {}, `¿Cambiar «${query.value.trim()}» por «${newText}» en ${chosen.length === 1 ? "1 párrafo" : `${fmt(chosen.length)} párrafos`}?`),
+        newText ? null : h("p", { class: "warn small" }, "El texto nuevo está vacío: se borrará lo encontrado."),
+        h("p", { class: "muted small" }, "El formato se conserva y podrás deshacerlo.")), { ok: "Reemplazar" });
+      if (!ok) return;
+      const res = await guard(() => rpc("replace_text", query.value.trim(), newText, options(), chosen));
+      if (!res) return;
+      toast(`${plural(res.reemplazos, "reemplazo", "reemplazos")} en ${plural(res.parrafos, "párrafo", "párrafos")}.`);
+      await refreshSummary();
+      run();
+    } }, "Reemplazar en los marcados");
+    const updateCount = () => {
+      const n = checks.filter((c) => c.box.checked).length;
+      count.textContent = plural(n, "marcado", "marcados");
+      replaceBtn.disabled = !n;
+    };
+    const groups = new Map();
+    r.resultados.forEach((x) => { if (!groups.has(x.doc)) groups.set(x.doc, []); groups.get(x.doc).push(x); });
+    const cards = [];
+    for (const [doc, xs] of groups) {
+      cards.push(h("div", { class: "card qa-group" },
+        h("h3", {}, xs[0].titulo),
+        xs.map((x) => {
+          const box = h("input", { type: "checkbox", checked: true, onchange: updateCount });
+          if (!inSource) checks.push({ box, doc, n: x.n });
+          const f = x.fragmento;
+          return h("div", { class: "qa-row search-row" },
+            inSource ? h("span", { class: "muted small" }, `§${x.n}`) : h("label", { class: "row", style: "margin:0;gap:8px" }, box, h("span", { class: "muted small" }, `§${x.n}`)),
+            h("div", { style: "min-width:0" },
+              h("div", { class: "frag" }, f.antes, h("mark", {}, f.texto), f.despues),
+              x.coincidencias > 1 ? h("div", { class: "muted small" }, `${fmt(x.coincidencias)} veces en este párrafo`) : null,
+              inSource ? h("div", { class: "small", style: "margin-top:4px" }, h("span", { class: "muted" }, "Traducción: "), x.traduccion || h("em", { class: "muted" }, "sin traducir")) : null),
+            h("button", { class: "small ghost", onclick: () => { state.focusSeg = x.n; go("revision", doc); } }, "Revisar"));
+        })));
+    }
+    put(results,
+      h("div", { class: "row", style: "margin:18px 0 4px" },
+        h("span", {}, h("strong", {}, plural(r.coincidencias, "coincidencia", "coincidencias")), ` en ${plural(r.parrafos, "párrafo", "párrafos")}` + (r.truncado ? " (se muestran los primeros)" : "")),
+        h("div", { class: "spacer" }),
+        inSource ? null : h("button", { class: "small ghost", onclick: () => { const all = checks.some((c) => !c.box.checked); checks.forEach((c) => { c.box.checked = all; }); updateCount(); } }, "Marcar o desmarcar todo"),
+        inSource ? null : count,
+        inSource ? null : replaceBtn),
+      cards);
+    if (!inSource) updateCount();
+  }
+
+  put(v,
+    pageHead("Herramientas", "Buscar y reemplazar",
+      "Busca una palabra o frase en todo el libro, en la traducción o en el original. Puedes reemplazarla en los párrafos que marques: las cursivas, notas e imágenes se conservan y el último reemplazo se puede deshacer."),
+    h("div", { class: "card stack" },
+      h("div", { class: "grid2", style: "margin:0" },
+        h("div", { class: "field", style: "margin:0" }, h("label", {}, "Buscar"), query),
+        h("div", { class: "field", style: "margin:0" }, h("label", {}, "Reemplazar por ", h("span", { class: "hint" }, "(solo en la traducción)")), repl)),
+      h("div", { class: "row" },
+        h("label", { class: "row", style: "margin:0;gap:8px;font-weight:500" }, caseBox, "Distinguir mayúsculas"),
+        h("label", { class: "row", style: "margin:0;gap:8px;font-weight:500" }, wordBox, "Palabra completa"),
+        h("span", { class: "muted small" }, "Buscar"), where,
+        h("div", { class: "spacer" }),
+        h("button", { onclick: run }, "Buscar"))),
+    undoBox, results);
+  if (query.value.trim()) run();
+  else query.focus();
 }
 
 /* ---------------------------------------------------------------- exportar */

@@ -529,6 +529,8 @@ button.qa-chip.aviso::before { background: var(--gold-bright); }
 .qa-row:last-child { border-bottom: none; padding-bottom: 2px; }
 .qa-row > .dot { margin-top: 7px; }
 .qa-row .frag { margin-top: 4px; font-family: var(--serif); font-style: italic; font-size: 1.05rem; color: var(--text-2); }
+mark { background: var(--select); color: inherit; padding: 0 2px; border-radius: 3px; font-style: normal; }
+.search-row { align-items: center; }
 button.link.inline { font-family: inherit; font-size: inherit; font-weight: 600; text-decoration-color: var(--gold-bright); }
 
 .card.manual { border-top: 3px solid var(--gold-bright); background: linear-gradient(180deg, var(--gold-wash), var(--card) 140px); }

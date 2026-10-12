@@ -18,6 +18,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .. import __version__, inline, knowledge, qa, updates
+from .. import search as finder
 from ..epub import EpubBook, EpubError
 from ..pdf2epub import PdfError
 from ..inline import localname
@@ -669,6 +670,31 @@ class Api:
         self._check_not_busy(index)
         qa.ignore(self._need_project(), index, n, kind, key)
         return True
+
+    # -- buscar y reemplazar -------------------------------------------------------
+
+    @staticmethod
+    def _search_options(options: dict | None) -> dict:
+        o = options or {}
+        return {"case": bool(o.get("mayusculas")), "whole_word": bool(o.get("palabra"))}
+
+    def find_text(self, query: str, options: dict | None = None) -> dict:
+        """Busca en la traducción o, con ``{"en": "original"}``, en el original."""
+        field = "src" if (options or {}).get("en") == "original" else "tgt"
+        return finder.search(self._need_project(), query, field=field, **self._search_options(options))
+
+    def replace_text(self, query: str, replacement: str, options: dict | None = None,
+                     only: list | None = None) -> dict:
+        """Reemplaza en la traducción (en todos los párrafos o solo en ``only``)."""
+        if self._tasks.state["activa"]:
+            raise ValueError("Espera a que termine la tarea en curso para reemplazar.")
+        return finder.replace(self._need_project(), query, replacement, only=only,
+                              **self._search_options(options))
+
+    def undo_replace(self) -> dict:
+        if self._tasks.state["activa"]:
+            raise ValueError("Espera a que termine la tarea en curso.")
+        return finder.undo_replacement(self._need_project())
 
     # -- exportación -----------------------------------------------------------
 
