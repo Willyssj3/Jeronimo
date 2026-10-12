@@ -100,6 +100,9 @@ ofrece instalarlo.
 - **Control de calidad sin gastar IA**: términos del glosario, párrafos incompletos,
   palabras sin traducir, números, signos de apertura, rayas de diálogo y nombres escritos
   de varias formas.
+- **Correcciones con un clic**: lo mecánico (signos, espacios, rayas, nombres) se arregla al
+  instante y se puede deshacer; para lo demás, la IA propone una corrección que aceptas o
+  descartas.
 - **Buscar y reemplazar** en todo el libro, con deshacer.
 - **Lectura en voz alta** del capítulo, como en un lector, para detectar frases torpes.
 - Borrar la traducción de un capítulo y recuperarla si te arrepientes.
@@ -123,7 +126,7 @@ ofrece instalarlo.
 <table>
   <tr>
     <td width="50%"><img src="docs/capturas/sugerencia.png" alt="Segunda pasada con IA: sugerencias para aceptar o descartar"><br><sub><b>Segunda pasada con IA</b>: cada sugerencia aparece debajo de su párrafo.</sub></td>
-    <td width="50%"><img src="docs/capturas/calidad.png" alt="Control de calidad"><br><sub><b>Control de calidad</b>: avisos para revisar, sin gastar IA.</sub></td>
+    <td width="50%"><img src="docs/capturas/calidad.png" alt="Control de calidad"><br><sub><b>Control de calidad</b>: avisos sin gastar IA, que se corrigen con un clic.</sub></td>
   </tr>
   <tr>
     <td><img src="docs/capturas/glosario.png" alt="Glosario"><br><sub><b>Estilo y glosario</b>: lo oficial, lo que propone la IA y lo que decides tú.</sub></td>

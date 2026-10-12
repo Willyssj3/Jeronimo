@@ -18,6 +18,7 @@ const call = (name, ...args) => page.evaluate(([n, a]) => rpc(n, ...a), [name, a
 const clearToasts = () => page.evaluate(() => { document.querySelector("#toast").textContent = ""; });
 const shot = async (name) => {
   await clearToasts();
+  await page.mouse.move(1, 1);  // que ningún botón quede resaltado por el puntero
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${out}/${name}.png` });
   console.log("·", name);
@@ -86,6 +87,8 @@ await hideManual();
 await page.locator(".suggestion").first().evaluate((el) => el.closest(".seg").scrollIntoView({ block: "center" }));
 await shot("sugerencia");
 
+// En Calidad: la propuesta de la IA para el glosario y el «¿» que se corrige con un clic.
+await call("review_resolve", index["The Festival"], 2, false);
 await goTo("calidad");
 await page.waitForSelector(".qa-summary");
 await shot("calidad");

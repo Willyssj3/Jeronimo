@@ -15,6 +15,8 @@ from traductor.translate import Translator
 
 SEG_RE = re.compile(r'<seg id="(\d+)">(.*?)</seg>', re.DOTALL)
 REVIEW_RE = re.compile(r'<seg id="(\d+)"><source>(.*?)</source><translation>(.*?)</translation></seg>', re.DOTALL)
+QA_FIX_RE = re.compile(r'<seg id="(\d+)"><source>(.*?)</source><translation>(.*?)</translation><problem>(.*?)</problem></seg>',
+                       re.DOTALL)
 
 
 class FakeAI(Provider):
@@ -47,6 +49,16 @@ class FakeAI(Provider):
         if "decide how to render each term" in user:
             return Completion('{"term": "Harrowgate", "translation": "Puertoarado", "note": "nombre parlante"}',
                               usage, self.model)
+        if "# Segments to fix" in user:
+            # Corrector simulado de avisos de calidad: arregla «Harrowgate»; lo demás, lo da por bueno.
+            out = []
+            for n, _src, tgt, _problem in QA_FIX_RE.findall(user.split("# Segments to fix", 1)[1]):
+                if "HARROWGATE" in tgt or "Harrowgate" in tgt:
+                    fixed = tgt.replace("HARROWGATE", "PUERTOARADO").replace("Harrowgate", "Puertoarado")
+                    out.append(f'<fix id="{n}"><text>{fixed}</text><why>Glosario: Harrowgate es Puertoarado.</why></fix>')
+                else:
+                    out.append(f'<ok id="{n}"><why>Está bien así.</why></ok>')
+            return Completion("\n".join(out), usage, self.model)
         if "# Segments to review" in user:
             # Revisor simulado: corrige «HARROWGATE» según el glosario.
             fixes = []

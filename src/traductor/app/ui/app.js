@@ -1574,7 +1574,7 @@ function segmentRow(data, s, issues = []) {
     };
     suggestion = h("div", { class: "suggestion" },
       h("div", { class: "row" },
-        h("span", { class: "eyebrow", style: "margin:0" }, t("Sugerencia de la revisión")),
+        h("span", { class: "eyebrow", style: "margin:0" }, s.sugerencia.origen === "calidad" ? t("Propuesta del control de calidad") : t("Sugerencia de la revisión")),
         s.sugerencia.motivo ? h("span", { class: "muted small", style: "font-style:italic" }, s.sugerencia.motivo) : null),
       diffView(s.tgt || "", s.sugerencia.texto, marks),
       (s.sugerencia.avisos || []).map((w) => h("span", { class: "warn small" }, t(w))),
@@ -1796,17 +1796,280 @@ function manualPanel(index) {
 
 /* ---------------------------------------------------------------- control de calidad */
 
+// Avisos que se corrigen al instante, sin IA (en este orden, si se corrigen todos juntos).
+const QA_DIRECT = ["dialogo", "signos", "espacios"];
+
+/* Lo corregido desde la pantalla de calidad (de este proyecto), para mostrarlo y deshacerlo. */
+function qaRecentList() {
+  const key = state.summary.carpeta;
+  if (!state.qaRecent || state.qaRecent.key !== key) state.qaRecent = { key, items: [] };
+  return state.qaRecent.items;
+}
+
 async function renderQuality(v) {
-  const r = await guard(() => rpc("quality"));
+  let r = await guard(() => rpc("quality"));
   if (!r) return;
+  const manual = state.summary.proveedor.tipo === "manual";
+  const busy = !!(state.task && state.task.activa);
   let filter = r.resumen[state.qaFilter] ? state.qaFilter : "";
+  const recent = qaRecentList();
   const chips = h("div", { class: "qa-summary" });
+  const tools = h("div", { class: "row qa-tools" });
+  const recentBox = h("div", {});
+  const manualBox = h("div", {});
   const list = h("div", {});
-  const recount = () => {
-    r.resumen = {};
-    r.problemas.forEach((p) => { r.resumen[p.tipo] = (r.resumen[p.tipo] || 0) + 1; });
+  const paragraphs = (items) => new Set(items.map((p) => `${p.doc}-${p.n}`)).size;
+
+  const reload = async () => {
+    const main = $("#main");
+    const y = main ? main.scrollTop : 0;
+    const fresh = await guard(() => rpc("quality"));
+    if (!fresh) return;
+    r = fresh;
     if (!r.resumen[filter]) filter = "";
+    draw();
+    if (main) main.scrollTop = y;
   };
+
+  const remember = (res, label) => {
+    if (!res || !res.lote) return;
+    recent.unshift({ lote: res.lote, label, cambios: res.cambios });
+    recent.splice(5);
+  };
+
+  const undo = async (lote) => {
+    const res = await guard(() => rpc("quality_undo", lote));
+    if (!res) return;
+    const i = recent.findIndex((x) => x.lote === lote);
+    if (i >= 0) recent.splice(i, 1);
+    toast(res.omitidos
+      ? t("Deshecho en {restaurados}; {omitidos} se habían vuelto a editar y quedaron como estaban.", { restaurados: plural(res.restaurados, t("párrafo"), t("párrafos")), omitidos: res.omitidos })
+      : t("Corrección deshecha."));
+    await reload();
+  };
+
+  const fixDirect = async (kinds, items, label) => {
+    let total = 0;
+    for (const kind of kinds) {
+      const res = await guard(() => rpc("quality_fix", kind, items));
+      if (!res) break;
+      if (res.corregidos) {
+        remember(res, label || r.tipos[kind].nombre);
+        total += res.corregidos;
+      }
+    }
+    toast(total ? t("Corregido: {parrafos}. Puedes deshacerlo.", { parrafos: plural(total, t("párrafo"), t("párrafos")) })
+      : t("No había nada que corregir al instante."), !total);
+    await reload();
+  };
+
+  const fixAI = async (p, btn) => {
+    if (manual) return openManual({ items: [[p.doc, p.n]] });
+    btn.disabled = true;
+    btn.textContent = t("Pidiendo a la IA…");
+    const res = await guard(() => rpc("quality_ai_fix", p.doc, p.n));
+    btn.disabled = false;
+    btn.textContent = t("Corregir con IA");
+    if (!res) return;
+    if (res.sugerencias) toast(t("La IA propone una corrección: acéptala o descártala."));
+    else if (res.bien) toast(t("La IA revisó el párrafo y no ve nada que cambiar."));
+    else toast(t("La IA no devolvió una propuesta. Prueba otra vez."), true);
+    await reload();
+  };
+
+  const fixAllAI = (kinds) => (manual ? openManual({ kinds }) : startTask(() => rpc("quality_ai_fix_all", kinds)));
+
+  const resolve = async (p, accept) => {
+    const st = await guard(() => rpc("review_resolve", p.doc, p.n, accept));
+    if (!st) return;
+    toast(accept ? t("Corrección aceptada.") : t("Propuesta descartada."));
+    await reload();
+  };
+
+  const acceptAll = async (proposals) => {
+    let done = 0;
+    for (const key of new Set(proposals.map((p) => `${p.doc}-${p.n}`))) {
+      const [doc, n] = key.split("-").map(Number);
+      const st = await guard(() => rpc("review_resolve", doc, n, true));
+      if (!st) break;
+      done += st.resueltas;
+    }
+    toast(`${plural(done, t("corrección aceptada"), t("correcciones aceptadas"))}.`);
+    await reload();
+  };
+
+  const unify = async (p) => {
+    const forms = p.formas || [];
+    if (forms.length < 2) return;
+    let keep = forms[0][0];
+    const box = h("div", { class: "provider-list" });
+    forms.forEach(([word, count]) => box.append(h("label", { class: word === keep ? "selected" : "" },
+      h("input", { type: "radio", name: "forma", value: word, checked: word === keep, onchange: () => {
+        keep = word;
+        box.querySelectorAll("label").forEach((l) => l.classList.toggle("selected", l.querySelector("input").value === word));
+      } }),
+      h("span", {}, word, " ", h("span", { class: "muted small" }, `(${plural(count, t("vez"), t("veces"))})`)))));
+    const ok = await modal(h("div", {},
+      h("h3", {}, t("¿Cómo queda escrito este nombre?")),
+      h("p", {}, t("Las otras formas se cambian en todo el libro. Después puedes deshacerlo.")), box), { ok: t("Unificar") });
+    if (!ok) return;
+    const res = await guard(() => rpc("quality_unify_name", forms.map((f) => f[0]), keep));
+    if (!res) return;
+    remember(res, t("Unificar «{nombre}»", { nombre: keep }));
+    toast(t("Listo: «{nombre}» en {parrafos}.", { nombre: keep, parrafos: plural(res.corregidos, t("párrafo"), t("párrafos")) }));
+    await reload();
+  };
+
+  /* Modo manual: las instrucciones se copian en el chat y se pega la respuesta. */
+  let manualScope = null;
+  const manualOut = h("textarea", { placeholder: t("Pega aquí la respuesta completa del chat (el bloque de código con las propuestas <fix …>).") });
+  const manualInfo = h("p", { class: "muted small", style: "margin:0" });
+  const copyManual = async () => {
+    const p = await guard(() => rpc("quality_ai_manual_prompt", manualScope.kinds || null, manualScope.items || null));
+    if (p === undefined) return;
+    if (p === null) {
+      toast(t("No quedan avisos para corregir con la IA."));
+      manualScope = null;
+      drawManual();
+      return;
+    }
+    manualInfo.textContent = t("Instrucciones copiadas: {parrafos} ({caracteres} caracteres).", { parrafos: plural(p.parrafos, t("párrafo"), t("párrafos")), caracteres: fmt(p.caracteres) }) +
+      (p.restantes ? " " + t("Después quedan {resto}.", { resto: plural(p.restantes, t("párrafo"), t("párrafos")) }) : "");
+    if (await copyText(p.texto)) {
+      toast(t("Instrucciones copiadas. Pégalas en tu chat de IA."));
+      return;
+    }
+    const ta = h("textarea", { class: "big" });
+    ta.value = p.texto;
+    if (await modal(h("div", {}, h("p", {}, t("Pulsa «Copiar» para llevarte las instrucciones:")), ta), { ok: t("Copiar"), cancel: t("Cerrar") })) {
+      ta.select();
+      await copyText(p.texto);
+    }
+  };
+  const importManual = async (thenCopy) => {
+    if (!manualOut.value.trim()) return toast(t("Pega primero la respuesta del chat."), true);
+    const res = await guard(() => rpc("quality_ai_manual_import", manualOut.value));
+    if (!res) return;
+    manualOut.value = "";
+    manualInfo.textContent = "";
+    toast(t("Importado: {propuestas}; {bien}.", { propuestas: plural(res.sugerencias, t("propuesta nueva"), t("propuestas nuevas")), bien: plural(res.bien, t("párrafo ya correcto"), t("párrafos ya correctos")) }));
+    if (!thenCopy) manualScope = null;
+    await reload();
+    if (thenCopy) await copyManual();
+  };
+  const drawManual = () => {
+    manualBox.textContent = "";
+    if (!manualScope) return;
+    put(manualBox, h("div", { class: "card manual stack" },
+      h("div", { class: "row" },
+        h("div", { class: "eyebrow", style: "margin:0" }, t("Modo manual")),
+        h("div", { class: "spacer" }),
+        h("button", { class: "small ghost", onclick: () => { manualScope = null; drawManual(); } }, t("Cerrar"))),
+      h("h3", { style: "margin-top:0" }, t("Corregir con cualquier chat de IA")),
+      h("ol", { class: "small", style: "margin:0;padding-left:1.2em;line-height:1.6" },
+        h("li", {}, t("Pulsa «Copiar instrucciones» y pégalas en tu chat de IA.")),
+        h("li", {}, t("Cuando termine, copia la respuesta con el botón de copiar del bloque de código.")),
+        h("li", {}, t("Pégala aquí e impórtala: cada propuesta aparece en su aviso para aceptarla o descartarla."))),
+      h("div", { class: "row" }, h("button", { onclick: copyManual }, t("Copiar instrucciones")), manualInfo),
+      manualOut,
+      h("div", { class: "row end" },
+        manualScope.items
+          ? h("button", { class: "gold", onclick: () => importManual(false) }, t("Importar"))
+          : [h("button", { class: "ghost", onclick: () => importManual(false) }, t("Solo importar")),
+            h("button", { class: "gold", onclick: () => importManual(true) }, t("Importar y copiar el siguiente"))])));
+  };
+  const openManual = async (scope) => {
+    manualScope = scope;
+    drawManual();
+    manualBox.scrollIntoView({ block: "nearest" });
+    await copyManual();
+  };
+
+  const row = (p, showProposal) => {
+    const actions = h("div", { class: "row qa-actions" });
+    if (!p.sugerencia && p.opinion === undefined) {
+      if (p.arreglo === "directo") {
+        actions.append(h("button", { class: "small gold", disabled: busy, title: t("Se corrige al instante, sin IA. Puedes deshacerlo."),
+          onclick: () => fixDirect([p.tipo], [[p.doc, p.n]], `${r.tipos[p.tipo].nombre} · ${p.titulo} §${p.n}`) }, t("Corregir")));
+      } else if (p.arreglo === "ia") {
+        actions.append(h("button", { class: "small", disabled: busy, title: t("La IA relee el párrafo y propone una corrección para aceptar o descartar"),
+          onclick: (e) => fixAI(p, e.currentTarget) }, t("Corregir con IA")));
+      } else if (p.arreglo === "nombres" && (p.formas || []).length > 1) {
+        actions.append(h("button", { class: "small gold", disabled: busy, title: t("Elige cómo queda escrito y se cambia en todo el libro"),
+          onclick: () => unify(p) }, t("Unificar…")));
+      }
+    }
+    actions.append(
+      h("button", { class: "small ghost", onclick: () => { state.focusSeg = p.n; go("revision", p.doc); } }, t("Revisar")),
+      h("button", { class: "small ghost", title: t("No volver a avisar de esto"), onclick: async () => {
+        if (await guard(() => rpc("quality_ignore", p.doc, p.n, p.tipo, p.clave || ""))) await reload();
+      } }, t("Ignorar")));
+    let proposal = null;
+    if (p.sugerencia && showProposal) {
+      proposal = h("div", { class: "qa-proposal" },
+        h("div", { class: "row" },
+          h("span", { class: "eyebrow", style: "margin:0" }, t("Propuesta de la IA")),
+          p.sugerencia.motivo ? h("span", { class: "muted small", style: "font-style:italic" }, p.sugerencia.motivo) : null),
+        diffView(p.tgt || "", p.sugerencia.texto, {}),
+        (p.sugerencia.avisos || []).map((w) => h("span", { class: "warn small" }, t(w))),
+        h("div", { class: "row" },
+          h("button", { class: "small gold", disabled: busy, onclick: () => resolve(p, true) }, t("Aceptar")),
+          h("button", { class: "small ghost", disabled: busy, onclick: () => resolve(p, false) }, t("Descartar"))));
+    } else if (p.sugerencia) {
+      proposal = h("div", { class: "muted small" }, t("La propuesta de la IA para este párrafo está en el aviso de arriba."));
+    }
+    return h("div", { class: "qa-row" },
+      h("span", { class: "dot " + p.nivel, title: p.nivel === "error" ? t("Probable error") : t("Para revisar") }),
+      h("div", { style: "min-width:0" },
+        h("div", {}, h("strong", {}, r.tipos[p.tipo].nombre), h("span", { class: "muted" }, ` · §${p.n}`)),
+        h("div", {}, p.mensaje),
+        p.fragmento && !(p.sugerencia && showProposal) ? h("div", { class: "frag" }, p.fragmento) : null,
+        proposal,
+        p.opinion !== undefined ? h("div", { class: "note small qa-opinion" },
+          p.opinion ? t("La IA revisó este aviso y no ve nada que cambiar: {motivo}", { motivo: p.opinion }) : t("La IA revisó este aviso y no ve nada que cambiar.")) : null),
+      actions);
+  };
+
+  const drawTools = (items) => {
+    tools.textContent = "";
+    const direct = items.filter((p) => p.arreglo === "directo" && !p.sugerencia && p.opinion === undefined);
+    const ai = items.filter((p) => p.arreglo === "ia" && !p.sugerencia && p.opinion === undefined);
+    const proposals = items.filter((p) => p.sugerencia);
+    if (direct.length) {
+      const kinds = QA_DIRECT.filter((k) => direct.some((p) => p.tipo === k));
+      tools.append(h("button", { class: "small gold", disabled: busy, title: t("Signos de apertura, espacios y rayas de diálogo: se corrigen al instante, sin IA. Puedes deshacerlo."),
+        onclick: () => fixDirect(kinds, null) }, t("Corregir al instante ({n})", { n: fmt(direct.length) })));
+    }
+    if (ai.length) {
+      const kinds = filter ? [filter] : [...new Set(ai.map((p) => p.tipo))];
+      tools.append(h("button", { class: "small", disabled: busy, title: t("La IA relee cada párrafo y propone una corrección para aceptar o descartar"),
+        onclick: () => fixAllAI(kinds) }, t("Proponer con IA ({n})", { n: fmt(paragraphs(ai)) })));
+    }
+    if (paragraphs(proposals) > 1) {
+      tools.append(h("button", { class: "small ghost", disabled: busy, onclick: () => acceptAll(proposals) },
+        t("Aceptar todas las propuestas ({n})", { n: fmt(paragraphs(proposals)) })));
+    }
+    tools.append(h("div", { class: "spacer" }));
+    if (r.deshacer && !recent.some((x) => x.lote === r.deshacer.id)) {
+      tools.append(h("button", { class: "small ghost", disabled: busy, title: r.deshacer.descripcion, onclick: () => undo(r.deshacer.id) },
+        t("Deshacer la última corrección")));
+    }
+  };
+
+  const drawRecent = () => {
+    recentBox.textContent = "";
+    if (!recent.length) return;
+    put(recentBox, h("div", { class: "card qa-group qa-recent" },
+      h("h3", {}, t("Corregido recién")),
+      // La última corrección muestra el cambio; las anteriores, solo su nombre y «Deshacer».
+      recent.map((x, i) => h("div", { class: "qa-row" + (i ? " compact" : ""), style: "grid-template-columns:1fr auto" },
+        h("div", { style: "min-width:0" },
+          h("div", {}, h("strong", {}, x.label), h("span", { class: "muted" }, " · " + plural(x.cambios.length, t("párrafo"), t("párrafos")))),
+          i ? null : x.cambios.slice(0, 2).map((c) => diffView(c.antes, c.despues, {})),
+          !i && x.cambios.length > 2 ? h("div", { class: "muted small" }, t("y {n} más", { n: fmt(x.cambios.length - 2) })) : null),
+        h("button", { class: "small ghost", disabled: busy, onclick: () => undo(x.lote) }, t("Deshacer"))))));
+  };
+
   const draw = () => {
     chips.textContent = "";
     const total = r.problemas.length;
@@ -1819,6 +2082,8 @@ async function renderQuality(v) {
     }
     list.textContent = "";
     const items = r.problemas.filter((p) => !filter || p.tipo === filter);
+    drawTools(items);
+    drawRecent();
     if (!items.length) {
       list.append(h("div", { class: "card empty-state" }, h("div", { class: "ornament" }, h("span")),
         r.parrafos ? t("No hay avisos en los {parrafos} párrafos traducidos.", { parrafos: fmt(r.parrafos) }) : t("Todavía no hay párrafos traducidos para revisar.")));
@@ -1826,35 +2091,28 @@ async function renderQuality(v) {
     }
     const groups = new Map();
     items.forEach((p) => { if (!groups.has(p.doc)) groups.set(p.doc, []); groups.get(p.doc).push(p); });
-    for (const [doc, ps] of groups) {
+    const shown = new Set();
+    for (const ps of groups.values()) {
       list.append(h("div", { class: "card qa-group" },
         h("h3", {}, ps[0].titulo, h("span", { class: "muted small qa-count" }, " · " + plural(ps.length, t("aviso"), t("avisos")))),
-        ps.slice(0, 300).map((p) => h("div", { class: "qa-row" },
-          h("span", { class: "dot " + p.nivel, title: p.nivel === "error" ? t("Probable error") : t("Para revisar") }),
-          h("div", { style: "min-width:0" },
-            h("div", {}, h("strong", {}, r.tipos[p.tipo].nombre), h("span", { class: "muted" }, ` · §${p.n}`)),
-            h("div", {}, p.mensaje),
-            p.fragmento ? h("div", { class: "frag" }, p.fragmento) : null),
-          h("div", { class: "row", style: "flex-wrap:nowrap" },
-            h("button", { class: "small ghost", onclick: () => { state.focusSeg = p.n; go("revision", doc); } }, t("Revisar")),
-            h("button", { class: "small ghost", title: t("No volver a avisar de esto"), onclick: async () => {
-              if (!(await guard(() => rpc("quality_ignore", p.doc, p.n, p.tipo, p.clave || "")))) return;
-              r.problemas = r.problemas.filter((x) => x !== p && !(p.clave && x.clave === p.clave));
-              recount();
-              draw();
-            } }, t("Ignorar")))))));
+        ps.slice(0, 300).map((p) => {
+          const key = `${p.doc}-${p.n}`;
+          const first = !shown.has(key);
+          shown.add(key);
+          return row(p, first);
+        })));
     }
   };
   draw();
   put(v,
     pageHead(t("Paso 4 de 5 · Revisión"), t("Control de calidad"),
-      t("Revisa toda la traducción sin gastar IA: términos del glosario, párrafos que pueden haber quedado incompletos, palabras en el idioma original, números, signos de apertura, rayas de diálogo y nombres escritos de varias formas. Son avisos para revisar: si alguno no es un error, ignóralo.")),
+      t("Revisa toda la traducción sin gastar IA: términos del glosario, párrafos que pueden haber quedado incompletos, palabras en el idioma original, números, signos de apertura, rayas de diálogo y nombres escritos de varias formas. Lo mecánico se corrige con un clic y se puede deshacer; para lo demás, la IA propone una corrección que aceptas o descartas. Si un aviso no es un error, ignóralo.")),
     h("div", { class: "row" },
       h("span", { class: "muted small" }, h("span", { class: "dot error" }), t(" probable error   "), h("span", { class: "dot aviso" }), t(" para revisar")),
       h("div", { class: "spacer" }),
       h("span", { class: "muted small" }, t("{parrafos} párrafos revisados", { parrafos: fmt(r.parrafos) })),
       h("button", { class: "ghost small", onclick: () => render() }, t("Volver a revisar"))),
-    chips, list);
+    chips, tools, recentBox, manualBox, list);
 }
 
 /* ---------------------------------------------------------------- buscar y reemplazar */

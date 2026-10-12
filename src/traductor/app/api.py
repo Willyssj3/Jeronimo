@@ -18,7 +18,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .. import __version__, components, i18n, inline, knowledge, profiles, qa, review, updates
+from .. import __version__, components, i18n, inline, knowledge, profiles, qa, qa_fix, review, updates
 from .. import search as finder
 from ..epub import EpubBook, EpubError
 from ..i18n import N_, tr
@@ -984,14 +984,90 @@ class Api:
     # -- control de calidad (sin IA) -------------------------------------------
 
     def quality(self, index: int | None = None) -> dict:
-        """Avisos de calidad de todo el libro o de un capítulo."""
-        return qa.check_project(self._need_project(), index)
+        """Avisos de calidad de todo el libro o de un capítulo, con cómo se corrige cada uno."""
+        return qa_fix.check(self._need_project(), index)
 
     def quality_ignore(self, index: int, n: int, kind: str, key: str = "") -> bool:
         """No volver a mostrar ese aviso (en ese párrafo, o ese nombre en todo el libro)."""
         self._check_not_busy(index)
         qa.ignore(self._need_project(), index, n, kind, key)
         return True
+
+    # -- corregir los avisos con un clic -----------------------------------------------
+
+    def _check_idle(self) -> None:
+        if self._tasks.state["activa"]:
+            raise ValueError(tr("Espera a que termine la tarea en curso."))
+
+    def quality_fix(self, kind: str, items: list | None = None) -> dict:
+        """Corrige sin IA los avisos de un tipo: los de ciertos párrafos ([[doc, n], …]) o todos."""
+        if items is None:
+            self._check_idle()
+        for doc, _n in items or []:
+            self._check_not_busy(int(doc))
+        return qa_fix.fix(self._need_project(), kind, items)
+
+    def quality_unify_name(self, forms: list[str], keep: str) -> dict:
+        """Escribe un nombre siempre igual en todo el libro."""
+        self._check_idle()
+        return qa_fix.unify_name(self._need_project(), forms, keep)
+
+    def quality_undo(self, batch: str | None = None) -> dict:
+        """Deshace una corrección (la última si no se dice cuál)."""
+        self._check_idle()
+        return qa_fix.undo(self._need_project(), batch)
+
+    def quality_ai_fix(self, index: int, n: int) -> dict:
+        """Propuesta de la IA conectada para los avisos de un párrafo."""
+        self._check_not_busy(index)
+        p = self._need_project()
+        fixer = qa_fix.Fixer(p, self._provider())
+        entries = fixer.pending(items=[[index, n]])
+        if not entries:
+            raise ValueError(tr("Este párrafo ya no tiene avisos para corregir con la IA."))
+        result = fixer.run(entries)
+        seg = p.load_chapter(index)["segmentos"][n]
+        return dict(result, sugerencia=seg.get("sugerencia"), tgt=seg.get("tgt") or "",
+                    opinion=(seg.get("qa_opinion") or {}).get("motivo") if result["bien"] else None)
+
+    def quality_ai_fix_all(self, kinds: list[str] | None = None) -> dict:
+        """Propuestas de la IA conectada para todos los avisos (o los de ciertos tipos), en segundo plano."""
+        p = self._need_project()
+        provider = self._provider()
+        fixer = qa_fix.Fixer(p, provider)
+        entries = fixer.pending(kinds or None)
+        if not entries:
+            raise ValueError(tr("No quedan avisos para corregir con la IA."))
+
+        def run(task: TaskRunner):
+            task.log(tr("Pidiendo a {model} propuestas para {n} párrafo(s)…", model=provider.model, n=len(entries)))
+            fixer.translator.log = task.log
+            result = fixer.run(entries, should_stop=task.cancelled,
+                               progress=lambda k, total: task.progress(k / total if total else 1, tr("Bloque {k} de {total}", k=min(k + 1, total), total=total)))
+            task.log(tr("Listo: {sugerencias} propuesta(s); en {bien} párrafo(s) la IA no vio nada que cambiar.",
+                        sugerencias=result["sugerencias"], bien=result["bien"]))
+            s, ok = result["sugerencias"], result["bien"]
+            if s:
+                message = tr("La IA propone 1 corrección: revísala en cada aviso.") if s == 1 else \
+                    tr("La IA propone {n} correcciones: revísalas en cada aviso.", n=s)
+            elif ok:
+                message = tr("La IA revisó los avisos y no ve nada que cambiar.")
+            else:
+                message = tr("La IA no devolvió propuestas. Prueba otra vez.")
+            return dict(result, mensaje=message)
+
+        self._tasks.start(N_("Corregir avisos con IA"), run, "calidad")
+        return self.task_status()
+
+    def quality_ai_manual_prompt(self, kinds: list[str] | None = None, items: list | None = None) -> dict | None:
+        """Modo manual: las instrucciones para corregir con cualquier chat (el primer bloque pendiente)."""
+        self._check_idle()
+        return qa_fix.Fixer(self._need_project()).manual_prompt(kinds or None, items)
+
+    def quality_ai_manual_import(self, text: str) -> dict:
+        """Modo manual: guarda las propuestas que devolvió el chat."""
+        self._check_idle()
+        return qa_fix.Fixer(self._need_project()).manual_import(text)
 
     # -- buscar y reemplazar -------------------------------------------------------
 

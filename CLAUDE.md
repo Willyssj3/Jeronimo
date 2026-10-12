@@ -58,7 +58,9 @@ convertir MOBI/AZW3.
   Git). Requiere `npm install -g playwright` y `npx playwright install chromium`.
 - Pruebas incluidas: flujo completo (`ui_test`), revisión, calidad, buscar y reemplazar, borrar
   traducción, perfiles, paquete para Proyectos, lectura, modo manual con plan, formatos de entrada
-  (todas en español, buscan los botones por su texto).
+  (todas en español, buscan los botones por su texto). `ui_qa_fix_test` (corregir los avisos con
+  un clic, deshacer, unificar nombres, propuestas de la IA conectada y en modo manual) sirve en los
+  tres idiomas: `correr.py ui_qa_fix_test.mjs 8771 en`.
 - `python tools/prueba_actualizacion.py CARPETA_DIST`: prueba de punta a punta de la actualización
   automática con la app empaquetada (`pyinstaller` desde `packaging/`): un GitHub falso local
   sirve una «versión 9.9.9», la app vieja la descarga, se cierra, el ayudante cambia la carpeta y
@@ -85,7 +87,10 @@ convertir MOBI/AZW3.
   - `prompts.py` (instrucciones a la IA, en inglés; las notas para el usuario salen en el idioma de
     la interfaz), `translate.py` (traducción por bloques, modo manual, chats/modelos/planes),
     `knowledge.py` (guía de estilo, glosario oficial, análisis del libro, términos), `review.py`
-    (segunda pasada con IA), `qa.py` (control de calidad sin IA), `search.py` (buscar y reemplazar),
+    (segunda pasada con IA), `qa.py` (control de calidad sin IA), `qa_fix.py` (corregir sus avisos:
+    lo mecánico al instante sobre el texto plano sin tocar las marcas, con una pila de «deshacer»
+    en `conocimiento/correcciones_calidad.json`; lo demás, una propuesta de la IA que queda como
+    `sugerencia` del párrafo con `origen: "calidad"`), `search.py` (buscar y reemplazar),
     `profiles.py` (perfiles de autor), `cover.py` (portada traducida), `export_docs.py` (Word y PDF),
     `convert.py` + `pdf2epub.py` + `ocr.py` (convertir PDF, Word, TXT, FB2, MOBI a EPUB, con OCR),
     `updates.py` (versión nueva: aviso, descarga del ZIP, reemplazo de la carpeta con un ayudante
@@ -150,41 +155,33 @@ convertir MOBI/AZW3.
 
 ## Estado y pendientes
 
-Versión publicada: **0.2.0**. Desde entonces se agregaron (sin publicar todavía): control de
-calidad, buscar y reemplazar, vista de lectura con voz, segunda pasada con IA, paquete para
-Proyectos de los chats, perfiles de autor, portada traducida (o una imagen propia), datos del libro
-editables, exportar a Word y PDF, convertir desde Word/TXT/FB2/MOBI/AZW3, OCR para PDF escaneados,
-modo manual con elección de modelo y plan, borrar la traducción de un capítulo, la interfaz
-completa en inglés y portugués (verificada pantalla por pantalla el 12/10/2026) y la descarga
-portable con actualización automática, instalación de lo que falta (con permiso) y accesos
-directos, y la página final «Traducido con Jerónimo» al exportar (`credit.py`; activada por
-defecto, se quita en «Exportar»). El README ya es la presentación para compartir (botón de
-descarga directa `docs/boton-descargar.svg`, capturas de `docs/capturas/`, preguntas frecuentes);
-el usuario eligió solo el README, sin página web aparte.
+Versión publicada: **0.3.0** (12/10/2026; la primera portable, con actualización automática,
+interfaz en inglés y portugués y la página final «Traducido con Jerónimo» al exportar). El README
+es la presentación para compartir (botón de descarga directa `docs/boton-descargar.svg`, capturas
+de `docs/capturas/` hechas con `tools/capturas_readme.py`, preguntas frecuentes); el usuario eligió
+solo el README, sin página web aparte.
+
+Lista para publicar (falta el OK del usuario): **0.3.1**, con la corrección de los avisos de calidad
+con un clic (`qa_fix.py`; notas en `docs/versiones/v0.3.1.md`). Lo mecánico (signos ¿ ¡,
+espacios, guion → raya) se corrige al instante y se puede deshacer; los nombres con dos grafías se
+unifican eligiendo cuál queda; lo demás (glosario, párrafo igual al original, palabras sin
+traducir, números, omisiones, formato perdido, estilo de los diálogos) lo propone la IA y se acepta
+o descarta (en modo manual, se copia al chat). Es la primera versión que les llega a todos por la
+actualización automática: después de publicarla, conviene comprobar que la 0.3.0 la ofrece y se
+actualiza bien.
 
 Pendiente, en este orden (lo fijó el usuario):
-1. **Publicar la 0.3.0**: el número ya está en `__init__.py` y las notas en
-   `docs/versiones/v0.3.0.md`; falta que el usuario dé el OK (ver «Publicar una versión»). Es la
-   primera con `Jeronimo-Windows.zip` y actualización automática: quien tenga la 0.2.0 recibe el
-   aviso de siempre y baja el ZIP a mano. El botón del README apunta a
-   `releases/latest/download/Jeronimo-Windows.zip`, que da error hasta que exista esa versión.
-2. **Versión 0.4.0** (lo eligió el usuario): (a) al crear el proyecto, dar ya las instrucciones para
+1. **Versión 0.4.0** (lo eligió el usuario): (a) al crear el proyecto, dar ya las instrucciones para
    armarlo en el chat de IA que use, con la guía de estilo y el glosario; (b) revisión final del
    libro completo, que busque errores e incongruencias usando las notas que quedan en cada
    capítulo; (c) lector de audiolibros: voces neuronales gratis que funcionan en la PC (se
    descargan una vez, pidiendo permiso; el texto no sale de la PC), voces distintas por personaje
    (con IA; sin IA, al menos narrador y diálogos) y exportar a MP3.
-3. **Corregir los avisos de calidad con un clic** (después de la 0.3.0; el usuario eligió el
-   diseño): botón «Corregir» en cada aviso y uno para todos los de un tipo. Lo mecánico (espacios,
-   signos ¿ ¡, guion → raya, nombres con dos grafías) se corrige al instante y se puede deshacer;
-   lo que necesita entender el texto (glosario, palabras sin traducir, números, omisiones) lo
-   propone la IA para ese párrafo y se acepta o descarta como en la revisión con IA (en modo
-   manual, se copia al chat).
-4. **Instalador firmado** (sin el aviso de Windows SmartScreen): en pausa hasta que el usuario lo
+2. **Programa firmado** (sin el aviso de Windows SmartScreen): en pausa hasta que el usuario lo
    pida. Plan: el usuario solicita el certificado gratuito para proyectos de código abierto de
    SignPath Foundation (verificar los requisitos actuales en signpath.org); después se agrega un
    paso de firma al flujo de GitHub con los secretos que den. Explicarle los pasos de forma simple.
-5. **Proponer mejoras** con opciones para elegir. Ideas ya anotadas: los títulos que agrega el
+3. **Proponer mejoras** con opciones para elegir. Ideas ya anotadas: los títulos que agrega el
    conversor de PDF a EPUB («Notas», «Índice», «Portada») salen en español aunque el libro esté en
    otro idioma; las reglas de rayas de diálogo y signos de apertura del control de calidad son
    solo para español, pero el libro se puede traducir a otros idiomas (`LANG_NAMES` en `prompts.py`).

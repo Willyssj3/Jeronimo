@@ -49,6 +49,7 @@ DEFAULT_RATIO = {("en", "es"): 1.15, ("en", "pt"): 1.12, ("en", "fr"): 1.15, ("e
 WORD_RE = re.compile(r"[^\W\d_]+(?:['’\-][^\W\d_]+)*")
 NUMBER_RE = re.compile(r"\d+(?:[.,\u00a0\u202f]\d+)*")
 SENTENCE_START = set(".!?¿¡—–-«“\"'‘…:;([")
+DIALOGUE_OPENERS = "“\"‘'«—"  # cómo empieza un diálogo en el original
 
 
 @dataclass
@@ -78,6 +79,11 @@ def _name_key(word: str) -> str:
 
 def _numbers(text: str) -> Counter:
     return Counter(re.sub(r"\D", "", m) for m in NUMBER_RE.findall(text))
+
+
+def _listing(items: list[str]) -> str:
+    """«a», «b» y «c», con la conjunción del idioma de la interfaz."""
+    return ", ".join(items[:-1]) + tr(" y ") + items[-1] if len(items) > 1 else "".join(items)
 
 
 class _GlossaryEntry:
@@ -115,6 +121,8 @@ class Checker:
         self.source_lang = (source_lang or "en").split("-")[0].lower()
         self.target_lang = (target_lang or "es").split("-")[0].lower()
         self.spanish = self.target_lang == "es"
+        self.french = self.target_lang == "fr"  # en francés van espacios antes de ; : ? ! y dentro de « »
+        self.name_forms: dict[str, Counter] = {}
         self.glossary = [_GlossaryEntry(e) for e in glossary
                          if (e.get("termino") or "").strip() and (e.get("traduccion") or "").strip()]
         self.ignored_names = set(ignored_names or [])
@@ -141,7 +149,7 @@ class Checker:
         """«raya» o «comillas», según lo que use la mayoría de los diálogos."""
         dash = quotes = 0
         for _c, _s, src, tgt in self._translated():
-            if src.lstrip()[:1] in "“\"‘'«—":
+            if src.lstrip()[:1] in DIALOGUE_OPENERS:
                 first = tgt.lstrip()[:1]
                 dash += first == "—"
                 quotes += first in "“\"«‘'"
@@ -179,7 +187,8 @@ class Checker:
         if self.leftovers:
             left = sorted({w for w in WORD_RE.findall(tgt) if w in self.leftovers})
             if left:
-                add("restos", tr("Posibles palabras en inglés: {palabras}.", palabras=", ".join(f"«{w}»" for w in left[:6])))
+                add("restos", tr("Posibles palabras en inglés: {palabras}.",
+                                 palabras=", ".join(tr("«{palabra}»", palabra=w) for w in left[:6])))
 
         if self.spanish:
             for close, opening in (("?", "¿"), ("!", "¡")):
@@ -204,7 +213,7 @@ class Checker:
             stripped = tgt.lstrip()
             if re.match(r"[-–]\s*[^\W\d_¿¡]|[-–]\s*[¿¡]", stripped):
                 add("dialogo", tr("Diálogo con guion: en español se usa la raya (—)."))
-            elif re.search(r"[^\W\d_][.,!?…]?\s[-–]\s?[^\W\d_]", tgt) and src.lstrip()[:1] in "“\"‘'«—":
+            elif re.search(r"[^\W\d_][.,!?…]?\s[-–]\s?[^\W\d_]", tgt) and src.lstrip()[:1] in DIALOGUE_OPENERS:
                 add("dialogo", tr("Inciso del narrador con guion: usa la raya (—)."))
         if self.dialogue_style and src.lstrip()[:1] in "“\"‘'«":
             first = tgt.lstrip()[:1]
@@ -216,9 +225,9 @@ class Checker:
         spacing = []
         if re.search(r"\S {2,}\S", tgt):
             spacing.append(tr("espacios dobles"))
-        if re.search(r"\s[,;:]|\s\.(?!\.)", tgt):
+        if re.search(r"\s,|\s\.(?!\.)" if self.french else r"\s[,;:]|\s\.(?!\.)", tgt):
             spacing.append(tr("espacio antes de un signo"))
-        if re.search(r"[¿¡«]\s", tgt) or re.search(r"\s[?!»]", tgt):
+        if not self.french and (re.search(r"[¿¡«]\s", tgt) or re.search(r"\s[?!»]", tgt)):
             spacing.append(tr("espacio junto a ¿ ? ¡ ! « »"))
         if spacing:
             add("espacios", tr("Revisa: {lista}.", lista=", ".join(spacing)))
@@ -244,12 +253,13 @@ class Checker:
                 key = _name_key(word)
                 forms[key][word] += 1
                 first_seen.setdefault(word, (ch["doc"], seg["n"]))
+        self.name_forms = {k: c for k, c in forms.items() if len(c) >= 2}
         found = []
         for key, counter in forms.items():
             if len(counter) < 2 or key in self.ignored_names:
                 continue
             ranked = counter.most_common()
-            listing = " y ".join(f"«{w}» ({c})" for w, c in ranked[:4])
+            listing = _listing([tr("«{palabra}» ({veces})", palabra=w, veces=c) for w, c in ranked[:4]])
             for word, _count in ranked[1:]:
                 doc, n = first_seen[word]
                 found.append(Issue(doc, n, "nombres", tr("Mismo nombre escrito de varias formas: {listing}.", listing=listing), key))
@@ -267,15 +277,20 @@ class Checker:
         return sorted(issues, key=lambda i: (i.doc, i.n, order.index(i.tipo)))
 
 
-def check_project(project, only: int | None = None) -> dict:
-    """Control de calidad de un proyecto (o de un solo capítulo)."""
+def make_checker(project, chapters: list[dict]) -> Checker:
+    return Checker(chapters, project.glossary(), source_lang=project.source_lang,
+                   target_lang=project.target_lang,
+                   ignored_names=project.config.get("qa_nombres_ignorados", []))
+
+
+def check_project(project, only: int | None = None, *, extra=None) -> dict:
+    """Control de calidad de un proyecto (o de un solo capítulo). ``extra(checker, issue, seg)``
+    puede agregar datos a cada aviso (por ejemplo, cómo se corrige)."""
     chapters = [project.load_chapter(i) for i in project.chapter_indices()]
-    checker = Checker(chapters, project.glossary(), source_lang=project.source_lang,
-                      target_lang=project.target_lang,
-                      ignored_names=project.config.get("qa_nombres_ignorados", []))
+    checker = make_checker(project, chapters)
     issues = checker.run(only)
     titles = {c["doc"]: c.get("titulo") or tr("Documento {doc}", doc=c['doc']) for c in chapters}
-    texts = {(c["doc"], s["n"]): strip_marks(s.get("tgt") or "") for c in chapters for s in c["segmentos"]}
+    segs = {(c["doc"], s["n"]): s for c in chapters for s in c["segmentos"]}
     checked = sum(1 for c in checker.chapters if only is None or c["doc"] == only
                   for s in c["segmentos"] if s.get("tgt"))
     rows = []
@@ -283,8 +298,11 @@ def check_project(project, only: int | None = None) -> dict:
         row = asdict(issue)
         row["nivel"] = issue.nivel
         row["titulo"] = titles.get(issue.doc, "")
-        text = texts.get((issue.doc, issue.n), "")
+        seg = segs.get((issue.doc, issue.n))
+        text = strip_marks(seg.get("tgt") or "") if seg else ""
         row["fragmento"] = text if len(text) <= 160 else text[:157].rsplit(" ", 1)[0] + "…"
+        if extra:
+            row.update(extra(checker, issue, seg))
         rows.append(row)
     return {"problemas": rows, "resumen": dict(Counter(i.tipo for i in issues)), "parrafos": checked,
             "tipos": {k: {"nombre": tr(v[0]), "nivel": v[1]} for k, v in KINDS.items()}}

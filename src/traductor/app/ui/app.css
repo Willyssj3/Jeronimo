@@ -538,6 +538,17 @@ button.qa-chip.aviso::before { background: var(--gold-bright); }
 .qa-row:last-child { border-bottom: none; padding-bottom: 2px; }
 .qa-row > .dot { margin-top: 7px; }
 .qa-row .frag { margin-top: 4px; font-family: var(--serif); font-style: italic; font-size: 1.05rem; color: var(--text-2); }
+.qa-tools { margin: 4px 0 14px; }
+.qa-tools:not(:has(button)) { display: none; }
+.qa-actions { flex-wrap: wrap; justify-content: flex-end; max-width: 340px; }
+.qa-proposal {
+  margin-top: 8px; padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--gold-wash); border: 1px dashed var(--gold-line); border-radius: 8px;
+}
+.qa-opinion { display: block; margin-top: 8px; width: fit-content; }
+.qa-recent { border-color: var(--gold-line); }
+.qa-recent .diff { margin-top: 6px; font-size: 1.05rem; }
+.qa-recent .qa-row.compact { padding: 7px 0; align-items: center; }
 mark { background: var(--select); color: inherit; padding: 0 2px; border-radius: 3px; font-style: normal; }
 .search-row { align-items: center; }
 button.link.inline { font-family: inherit; font-size: inherit; font-weight: 600; text-decoration-color: var(--gold-bright); }

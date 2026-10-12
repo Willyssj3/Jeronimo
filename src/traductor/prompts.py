@@ -265,6 +265,91 @@ def looks_like_review(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Corregir los avisos del control de calidad
+
+QA_FIX_SYSTEM = """\
+You are a meticulous literary editor. An automatic quality check flagged some segments of the translation of the book "{title}"{author_part} from {src} into {tgt}.
+{variant}
+For each segment you get the original, the current translation and the problem that was flagged. Fix that problem, changing as little as possible: keep the rest of the translation exactly as it is, and keep the voice of the official translator described in the style guide. Some flags are false alarms (for example, a number correctly written out in words, or a name that is rightly replaced by a pronoun): if the translation is already right, say so instead of changing it.
+
+Format rules:
+- The input comes as <seg id="N"><source>…</source><translation>…</translation><problem>…</problem></seg>.
+- For each segment you correct, answer <fix id="N"><text>the complete corrected translation of that segment</text><why>a very short explanation of the change, in {notes_lang}</why></fix>.
+- If a segment is already right, answer <ok id="N"><why>a very short reason, in {notes_lang}</why></ok>.
+- In <text>, keep every <gN>…</gN> and <xN/> tag of the source exactly once, around the corresponding words, and keep &amp; &lt; &gt; escaped.
+
+# Style guide
+{style_guide}
+
+# About the book
+{synopsis}
+"""
+
+QA_FIX_MANUAL_OUTPUT = """
+
+# Output format
+Write your whole answer inside ONE single code block (```), containing only the <fix> and <ok> elements. Do not write anything before or after the code block."""
+
+# Qué se le pide a la IA según el tipo de aviso ({detail}: el aviso tal como lo ve el usuario).
+QA_PROBLEMS = {
+    "glosario": "The glossary is not followed ({detail}). Use the mandatory rendering from the glossary.",
+    "igual": "The segment was left untranslated: the translation is identical to the original. Translate it.",
+    "restos": "Some words were left in the source language ({detail}). Translate them.",
+    "numeros": "The numbers do not match the original ({detail}). Make them match, unless the difference is correct.",
+    "longitud": "The translation looks much shorter or longer than the original ({detail}). Restore any omitted content or remove what was added.",
+    "formato": "Formatting was lost or misplaced ({detail}). Put each <gN>…</gN> tag of the source around the matching words of the translation and each <xN/> where it belongs.",
+    "dialogo": "Dialogue punctuation: {detail} Rewrite the dialogue marks (and the narrator's asides) accordingly.",
+    "signos": "Spanish opening question or exclamation marks: {detail}",
+    "espacios": "Spacing and punctuation: {detail}",
+}
+
+
+def qa_fix_system(*, title: str, author: str, src: str, tgt: str, variant: str,
+                  style_guide: str, synopsis: str) -> str:
+    return QA_FIX_SYSTEM.format(
+        title=title,
+        author_part=f" by {author}" if author else "",
+        src=lang_name(src),
+        tgt=lang_name(tgt),
+        variant=variant_line(variant, tgt),
+        style_guide=style_guide.strip() or NO_STYLE_GUIDE.format(tgt=lang_name(tgt)),
+        synopsis=synopsis.strip() or NO_SYNOPSIS,
+        notes_lang=notes_language(),
+    )
+
+
+def qa_problem(kind: str, detail: str) -> str:
+    return QA_PROBLEMS.get(kind, "{detail}").format(detail=detail.strip())
+
+
+def qa_fix_user(*, segments: list[tuple[int, str, str, str]], glossary: list[dict]) -> str:
+    parts: list[str] = []
+    if glossary:
+        lines = [f"- {g['termino']} → {g['traduccion']}" + (f" ({g['nota']})" if g.get("nota") else "") for g in glossary]
+        parts.append("# Glossary (mandatory renderings)\n" + "\n".join(lines))
+    segs = "\n".join(f'<seg id="{n}"><source>{src}</source><translation>{tgt}</translation><problem>{problem}</problem></seg>'
+                     for n, src, tgt, problem in segments)
+    parts.append("# Segments to fix\n" + segs)
+    return "\n\n".join(parts)
+
+
+_OK_RE = re.compile(r'<ok\s+id\s*=\s*["\']?(\d+)["\']?\s*(?:/>|>(.*?)</ok\s*>)', re.DOTALL | re.IGNORECASE)
+
+
+def parse_oks(text: str) -> dict[int, str]:
+    """Segmentos que la IA considera bien ``{id: motivo}``."""
+    oks: dict[int, str] = {}
+    for m in _OK_RE.finditer(text or ""):
+        why = _WHY_RE.search(m.group(2) or "")
+        oks.setdefault(int(m.group(1)), _NL_RE.sub(" ", why.group(1)).strip() if why else "")
+    return oks
+
+
+def looks_like_qa_fix(text: str) -> bool:
+    return bool(_FIX_RE.search(text or "") or _OK_RE.search(text or ""))
+
+
+# ---------------------------------------------------------------------------
 # Conocimiento: guía de estilo, glosario y análisis del libro
 
 ANALYST_SYSTEM = "You are an expert in literary translation and translation analysis. Follow the requested output format exactly."

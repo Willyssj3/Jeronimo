@@ -82,7 +82,8 @@ el coste estimado.
    - Diseño propio con la estética del logo (azul tinta, dorado, papel
      crema y EB Garamond), con modo oscuro.
 3. ✅ **Instalador de Windows** generado con GitHub Actions (PyInstaller +
-   Inno Setup) y publicado en *Releases* al crear una etiqueta `v*`.
+   Inno Setup) y publicado en *Releases* al crear una etiqueta `v*`. Desde la 0.3.0, en su
+   lugar, una **versión portable** (`Jeronimo-Windows.zip`) que se actualiza sola.
 4. **Mejoras pendientes**:
    - Probar el instalador en equipos reales. ✅ Nombre (Jerónimo) y logo propios.
    - Emparejamiento con *embeddings* multilingües (opcional, vía Ollama o API)
@@ -95,5 +96,8 @@ el coste estimado.
    - ✅ OCR para PDF escaneados; más formatos de entrada (DOCX, TXT, FB2, MOBI/AZW3) y salida
      (DOCX, PDF).
    - ✅ Interfaz en inglés y portugués.
-   - Corregir los avisos del control de calidad con un clic (directo para lo mecánico, con IA
-     para el resto), después de la versión 0.3.0.
+   - ✅ Corregir los avisos del control de calidad con un clic: lo mecánico al instante y con
+     deshacer, lo demás con una propuesta de la IA (`qa_fix.py`, versión 0.3.1).
+   - Para la 0.4.0 (elegido por el usuario): instrucciones para preparar el proyecto en la IA
+     apenas se crea; revisión final del libro completo con las notas de cada capítulo; lector de
+     audiolibros con voces locales gratuitas, una voz por personaje y exportación a MP3.
