@@ -26,6 +26,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from .i18n import N_, tr
 
 
 class PdfError(Exception):
@@ -156,11 +157,11 @@ def read_pdf(path: str | Path, progress=None) -> tuple[list[Page], dict]:
     try:
         import pdfplumber
     except ImportError as e:  # pragma: no cover
-        raise PdfError("Falta el componente pdfplumber para leer PDF.") from e
+        raise PdfError(tr("Falta el componente pdfplumber para leer PDF.")) from e
     try:
         pdf = pdfplumber.open(str(path))
     except Exception as e:
-        raise PdfError(f"No se pudo abrir el PDF: {e}") from e
+        raise PdfError(tr("No se pudo abrir el PDF: {error}", error=e)) from e
     pages: list[Page] = []
     with pdf:
         meta = dict(pdf.metadata or {})
@@ -184,7 +185,7 @@ def read_pdf(path: str | Path, progress=None) -> tuple[list[Page], dict]:
             pages.append(Page(i + 1, float(page.width), float(page.height), lines,
                               min(1.0, area / (page.width * page.height))))
             if progress:
-                progress((i + 1) / total * 0.7, f"Leyendo página {i + 1} de {total}…")
+                progress((i + 1) / total * 0.7, tr("Leyendo página {i} de {total}…", i=i + 1, total=total))
     return pages, meta
 
 
@@ -206,8 +207,8 @@ def _weighted_body_size(pages: list[Page]) -> float:
         for l in p.lines:
             counter[round(l.size * 2) / 2] += len(l.text)
     if not counter:
-        raise PdfError("El PDF no tiene texto seleccionable (parece escaneado). "
-                       "Para convertirlo haría falta reconocimiento de texto (OCR).")
+        raise PdfError(tr("El PDF no tiene texto seleccionable (parece escaneado). "
+                       "Para convertirlo haría falta reconocimiento de texto (OCR)."))
     return counter.most_common(1)[0][0]
 
 
@@ -649,7 +650,7 @@ def build_epub(blocks: list[Block], notes: dict[str, list[Run]], *, title: str, 
     report.notes = len(notes)
     missing = [n for n in notes if n not in used_notes]
     if missing:
-        report.warnings.append(f"{len(missing)} nota(s) sin llamada reconocida en el texto: se añadieron al final.")
+        report.warnings.append(tr("{n} nota(s) sin llamada reconocida en el texto: se añadieron al final.", n=len(missing)))
         extra = ['<section class="notas" epub:type="footnotes"><h2>Notas</h2>']
         for n in missing:
             extra.append(f'<aside id="{n}"><p>{_runs_html(notes[n])}</p></aside>')
@@ -766,6 +767,10 @@ def is_scanned(pages: list[Page]) -> bool:
     return bool(pages) and chars < 40 * len(pages)
 
 
+OCR_WARNING = N_("PDF escaneado: el texto se reconoció con {motor}. Revisa el resultado; "
+                 "las cursivas y negritas no se reconocen.")
+
+
 def convert(pdf_path: str | Path, out_path: str | Path | None = None, *, title: str | None = None,
             author: str | None = None, language: str | None = None, progress=None, ocr_lang: str = "",
             should_stop=None, ocr_engine=None) -> tuple[Path, Report]:
@@ -775,7 +780,7 @@ def convert(pdf_path: str | Path, out_path: str | Path | None = None, *, title: 
     del libro, p. ej. «es»; vacío para probar con los idiomas disponibles)."""
     pdf_path = Path(pdf_path)
     if not pdf_path.is_file():
-        raise PdfError(f"No encuentro el archivo «{pdf_path}».")
+        raise PdfError(tr("No encuentro el archivo «{pdf_path}».", pdf_path=pdf_path))
     out = Path(out_path) if out_path else pdf_path.with_suffix(".epub")
     report = Report()
     pages, meta = read_pdf(pdf_path, progress)
@@ -785,13 +790,12 @@ def convert(pdf_path: str | Path, out_path: str | Path | None = None, *, title: 
 
         pages, report.ocr = ocr_pdf(pdf_path, ocr_lang or language or "", progress=progress,
                                     should_stop=should_stop, engine=ocr_engine)
-        report.warnings.append(f"PDF escaneado: el texto se reconoció con {report.ocr}. Revisa el resultado; "
-                               "las cursivas y negritas no se reconocen.")
+        report.warnings.append(tr(OCR_WARNING, motor=report.ocr))
     if progress:
-        progress(0.75, "Reconstruyendo párrafos y capítulos…")
+        progress(0.75, tr("Reconstruyendo párrafos y capítulos…"))
     blocks, notes, _ids = analyze(pages, report)
     if not blocks:
-        raise PdfError("No se encontró texto en el PDF.")
+        raise PdfError(tr("No se encontró texto en el PDF."))
     text_sample = " ".join(r.text for b in blocks[:400] for r in b.runs)
     report.language = language or detect_language(text_sample)
     report.title = (title or str(meta.get("Title") or "").strip() or pdf_path.stem.replace("_", " "))
@@ -802,9 +806,9 @@ def convert(pdf_path: str | Path, out_path: str | Path | None = None, *, title: 
     cover = _render_cover(pdf_path, cover_page)
     # La página de portada (solo imagen) no aporta texto; si tenía texto, se conserva en el cuerpo.
     if progress:
-        progress(0.9, "Escribiendo el EPUB…")
+        progress(0.9, tr("Escribiendo el EPUB…"))
     build_epub(blocks, notes, title=report.title, author=report.author, lang=report.language,
                cover=cover, out_path=out, report=report)
     if progress:
-        progress(1.0, "Listo.")
+        progress(1.0, tr("Listo."))
     return out, report

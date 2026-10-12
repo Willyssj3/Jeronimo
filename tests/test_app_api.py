@@ -37,6 +37,7 @@ def test_project_flow(api, tmp_path):
     api.add_reference(str(tmp_path / "ref_en.epub"), str(tmp_path / "ref_es.epub"), "Nets")
     st = wait(api)
     assert st["error"] is None and st["resultado"]["pairs"] == 2
+    assert st["clave"] == "emparejar"
 
     api.set_provider({"tipo": "ollama", "modelo": "x"})
     api.prepare(["estilo", "glosario", "analisis", "terminos"])

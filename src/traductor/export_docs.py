@@ -18,6 +18,12 @@ from pathlib import Path
 from . import inline
 from .epub import EpubBook
 from .inline import localname
+from .i18n import tr
+
+# «Traducción de…» en el idioma del libro traducido (no en el de la interfaz).
+CREDIT = {"es": "Traducción de {nombre}", "pt": "Tradução de {nombre}", "en": "Translated by {nombre}",
+          "fr": "Traduit par {nombre}", "it": "Traduzione di {nombre}", "de": "Übersetzt von {nombre}",
+          "ca": "Traducció de {nombre}", "gl": "Tradución de {nombre}", "nl": "Vertaald door {nombre}"}
 
 ITALIC = {"i", "em", "cite", "var", "dfn"}
 BOLD = {"b", "strong"}
@@ -51,6 +57,11 @@ class Block:
 class Chapter:
     title: str
     blocks: list[Block]
+
+
+def credit(project, name: str) -> str:
+    lang = (project.target_lang or "es").split("-")[0].lower()
+    return CREDIT.get(lang, CREDIT["en"]).format(nombre=name)
 
 
 def to_runs(marked: str, slots: dict[int, tuple[str, str]]) -> list[Run]:
@@ -173,7 +184,7 @@ def export_docx(project, out: Path, *, bilingual: bool = False, progress=None) -
         p = doc.add_paragraph(core.author)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if meta.get("traductor"):
-        p = doc.add_paragraph(f"Traducción de {meta['traductor']}")
+        p = doc.add_paragraph(credit(project, meta["traductor"]))
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     for k, ch in enumerate(chapters):
@@ -184,7 +195,7 @@ def export_docx(project, out: Path, *, bilingual: bool = False, progress=None) -
             table.style = "Table Grid"
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
             head = table.rows[0].cells
-            head[0].text, head[1].text = "Original", "Traducción"
+            head[0].text, head[1].text = tr("Original"), tr("Traducción")
             for cell in head:
                 for run in cell.paragraphs[0].runs:
                     run.bold = True
@@ -262,8 +273,8 @@ def export_pdf(project, out: Path, *, page: str = "a5", progress=None) -> Path:
     missing = unsupported_chars("".join({c for ch in chapters for b in ch.blocks for c in _plain(b.runs)}))
     if missing:
         sample = " ".join(sorted(missing)[:12])
-        raise ValueError(f"El PDF usa la tipografía EB Garamond, que no tiene estos caracteres: {sample}. "
-                         "Exporta a Word o EPUB para este idioma.")
+        raise ValueError(tr("El PDF usa la tipografía EB Garamond, que no tiene estos caracteres: {sample}. "
+                            "Exporta a Word o EPUB para este idioma.", sample=sample))
 
     for name, file in (("EBG", "EBGaramond-Regular.ttf"), ("EBG-B", "EBGaramond-SemiBold.ttf"),
                        ("EBG-I", "EBGaramond-Italic.ttf")):
@@ -306,7 +317,7 @@ def export_pdf(project, out: Path, *, page: str = "a5", progress=None) -> Path:
     if meta["autor"]:
         story.append(Paragraph(html.escape(meta["autor"]), author_style))
     if meta.get("traductor"):
-        story.append(Paragraph(html.escape(f"Traducción de {meta['traductor']}"),
+        story.append(Paragraph(html.escape(credit(project, meta["traductor"])),
                                ParagraphStyle("trad", parent=author_style, fontName="EBG-I", fontSize=size * 1.05)))
     story.append(NextPageTemplate("texto"))
     for k, ch in enumerate(chapters):

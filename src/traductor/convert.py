@@ -21,8 +21,9 @@ from pathlib import Path
 from lxml import etree
 
 from .pdf2epub import Block, PdfError, Report, Run, build_epub, detect_language
+from .i18n import N_, tr
 
-FORMATS = {".epub": "EPUB", ".pdf": "PDF", ".docx": "Word", ".txt": "texto", ".fb2": "FictionBook",
+FORMATS = {".epub": "EPUB", ".pdf": "PDF", ".docx": "Word", ".txt": N_("texto"), ".fb2": "FictionBook",
            ".mobi": "Kindle (MOBI)", ".azw3": "Kindle (AZW3)", ".azw": "Kindle (AZW)"}
 
 
@@ -97,7 +98,7 @@ def docx_blocks(path: Path) -> tuple[list[Block], dict, dict, list[str]]:
     try:
         doc = Document(str(path))
     except Exception as e:  # archivo dañado o que no es DOCX
-        raise ConvertError(f"No se pudo abrir «{path.name}» como documento de Word: {e}") from e
+        raise ConvertError(tr("No se pudo abrir «{name}» como documento de Word: {error}", name=path.name, error=e)) from e
     notes_src = _docx_footnotes(doc)
     notes: dict[str, list[Run]] = {}
     counter = [0]
@@ -105,7 +106,7 @@ def docx_blocks(path: Path) -> tuple[list[Block], dict, dict, list[str]]:
     title = ""
     warnings = []
     if doc.inline_shapes:
-        warnings.append("Las imágenes del documento no se incluyen en el EPUB.")
+        warnings.append(tr("Las imágenes del documento no se incluyen en el EPUB."))
     for p in doc.paragraphs:
         runs, refs = _docx_runs(p._p, notes_src, notes, counter)
         text = "".join(r.text for r in runs).strip()
@@ -230,12 +231,12 @@ def _fb2_root(path: Path):
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             name = next((n for n in z.namelist() if n.lower().endswith(".fb2")), None)
             if not name:
-                raise ConvertError("El ZIP no contiene ningún archivo FB2.")
+                raise ConvertError(tr("El ZIP no contiene ningún archivo FB2."))
             data = z.read(name)
     parser = etree.XMLParser(recover=True, resolve_entities=False, huge_tree=True)
     root = etree.fromstring(data, parser)
     if root is None:
-        raise ConvertError(f"«{path.name}» no parece un FB2 válido.")
+        raise ConvertError(tr("«{name}» no parece un FB2 válido.", name=path.name))
     return root
 
 
@@ -321,7 +322,7 @@ def fb2_blocks(path: Path) -> tuple[list[Block], dict, dict, list[str], bytes | 
                     if _local(p) in ("p", "v", "text-author"):
                         para(p, "quote")
             elif name == "image" and "imagen" not in " ".join(warnings):
-                warnings.append("Las imágenes del interior no se incluyen en el EPUB.")
+                warnings.append(tr("Las imágenes del interior no se incluyen en el EPUB."))
             elif name == "empty-line":
                 continue
 
@@ -381,20 +382,20 @@ def find_calibre() -> str | None:
 def calibre_convert(path: Path, out: Path) -> None:
     exe = find_calibre()
     if not exe:
-        raise ConvertError("Para abrir libros MOBI o AZW3 hace falta Calibre, un programa gratuito "
+        raise ConvertError(tr("Para abrir libros MOBI o AZW3 hace falta Calibre, un programa gratuito "
                            "(calibre-ebook.com). Instálalo y vuelve a intentarlo, o convierte el libro a EPUB "
-                           "con Calibre.")
+                           "con Calibre."))
     flags = {"creationflags": 0x08000000} if sys.platform.startswith("win") else {}  # sin ventana de consola
     try:
         done = subprocess.run([exe, str(path), str(out)], capture_output=True, text=True, timeout=900, **flags)
     except (OSError, subprocess.TimeoutExpired) as e:
-        raise ConvertError(f"Calibre no pudo convertir el libro: {e}") from e
+        raise ConvertError(tr("Calibre no pudo convertir el libro: {error}", error=e)) from e
     output = (done.stdout or "") + (done.stderr or "")
     if done.returncode != 0 or not out.is_file():
         if "DRM" in output:
-            raise ConvertError("El libro tiene DRM (protección anticopia): no se puede convertir.")
+            raise ConvertError(tr("El libro tiene DRM (protección anticopia): no se puede convertir."))
         tail = " ".join(output.strip().splitlines()[-2:])[:300]
-        raise ConvertError(f"Calibre no pudo convertir el libro. {tail}".strip())
+        raise ConvertError(tr("Calibre no pudo convertir el libro. {tail}", tail=tail).strip())
 
 
 # ---------------------------------------------------------------------------
@@ -407,12 +408,12 @@ def convert(path: str | Path, out_path: str | Path | None = None, *, title: str 
     """Convierte un libro (PDF, DOCX, TXT, FB2, MOBI, AZW3) a EPUB."""
     path = Path(path)
     if not path.is_file():
-        raise ConvertError(f"No encuentro el archivo «{path}».")
+        raise ConvertError(tr("No encuentro el archivo «{path}».", path=path))
     kind = kind_of(path)
     if kind not in FORMATS:
-        raise ConvertError("Formato no admitido. Usa EPUB, PDF, Word (DOCX), TXT, FB2, MOBI o AZW3.")
+        raise ConvertError(tr("Formato no admitido. Usa EPUB, PDF, Word (DOCX), TXT, FB2, MOBI o AZW3."))
     if kind == ".epub":
-        raise ConvertError("Ese libro ya es un EPUB: úsalo directamente para crear el proyecto.")
+        raise ConvertError(tr("Ese libro ya es un EPUB: úsalo directamente para crear el proyecto."))
     stem = path.name[:-len(".fb2.zip")] if path.name.lower().endswith(".fb2.zip") else path.stem
     out = Path(out_path) if out_path else path.with_name(stem + ".epub")
     if kind == ".pdf":
@@ -424,16 +425,16 @@ def convert(path: str | Path, out_path: str | Path | None = None, *, title: str 
     report = Report()
     if kind in (".mobi", ".azw3", ".azw"):
         if progress:
-            progress(0.1, "Convirtiendo con Calibre…")
+            progress(0.1, tr("Convirtiendo con Calibre…"))
         out.parent.mkdir(parents=True, exist_ok=True)
         calibre_convert(path, out)
         report.title = title or stem
         if progress:
-            progress(1.0, "Listo.")
+            progress(1.0, tr("Listo."))
         return out, report
 
     if progress:
-        progress(0.2, f"Leyendo el archivo de {FORMATS[kind]}…")
+        progress(0.2, tr("Leyendo el archivo de {formato}…", formato=tr(FORMATS[kind])))
     cover = None
     if kind == ".docx":
         blocks, notes, meta, warnings = docx_blocks(path)
@@ -442,14 +443,14 @@ def convert(path: str | Path, out_path: str | Path | None = None, *, title: str 
     else:
         blocks, notes, meta, warnings = txt_blocks(path)
     if not blocks:
-        raise ConvertError("No se encontró texto en el archivo.")
+        raise ConvertError(tr("No se encontró texto en el archivo."))
     report.warnings += warnings
     sample = " ".join(r.text for b in blocks[:400] for r in b.runs)
     report.language = language or meta.get("language") or detect_language(sample)
     report.title = title or meta.get("title") or stem.replace("_", " ")
     report.author = author if author is not None else meta.get("author", "")
     if progress:
-        progress(0.7, "Escribiendo el EPUB…")
+        progress(0.7, tr("Escribiendo el EPUB…"))
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         tmp_out = Path(tmp) / "libro.epub"
@@ -457,5 +458,5 @@ def convert(path: str | Path, out_path: str | Path | None = None, *, title: str 
                    cover=cover, out_path=tmp_out, report=report)
         shutil.move(str(tmp_out), out)
     if progress:
-        progress(1.0, "Listo.")
+        progress(1.0, tr("Listo."))
     return out, report

@@ -9,6 +9,7 @@ import anthropic
 
 from .base import (AuthError, Completion, ConnectionProblem, Provider, ProviderError,
                    RateLimitError, RefusalError, Usage)
+from ..i18n import N_, tr
 
 DEFAULT_MODEL = "claude-opus-5-5"
 
@@ -29,9 +30,9 @@ PRICES = {
 }
 
 SUGGESTED_MODELS = [
-    ("claude-opus-5-5", "Opus 5.5 — máxima calidad recomendada"),
-    ("claude-sonnet-5-5", "Sonnet 5.5 — muy buena calidad, la mitad de precio"),
-    ("claude-haiku-5-5", "Haiku 5.5 — económico, para borradores"),
+    ("claude-opus-5-5", N_("Opus 5.5 — máxima calidad recomendada")),
+    ("claude-sonnet-5-5", N_("Sonnet 5.5 — muy buena calidad, la mitad de precio")),
+    ("claude-haiku-5-5", N_("Haiku 5.5 — económico, para borradores")),
 ]
 
 
@@ -51,8 +52,8 @@ class AnthropicProvider(Provider):
                  max_retries: int = 4, timeout: float = 900.0):
         if not api_key:
             raise AuthError(
-                "Falta la clave de API de Anthropic. Créala en console.anthropic.com "
-                "(se paga por uso, aparte de la suscripción de claude.ai).")
+                tr("Falta la clave de API de Anthropic. Créala en console.anthropic.com "
+                "(se paga por uso, aparte de la suscripción de claude.ai)."))
         self.model = model or DEFAULT_MODEL
         self.effort = effort
         self.max_output = 32000
@@ -80,24 +81,24 @@ class AnthropicProvider(Provider):
             with self.client.beta.messages.stream(**params) as stream:
                 msg = stream.get_final_message()
         except anthropic.AuthenticationError as e:
-            raise AuthError("La clave de API de Anthropic no es válida.") from e
+            raise AuthError(tr("La clave de API de Anthropic no es válida.")) from e
         except anthropic.PermissionDeniedError as e:
-            raise AuthError(f"Tu clave de Anthropic no tiene permiso para usar «{self.model}».") from e
+            raise AuthError(tr("Tu clave de Anthropic no tiene permiso para usar «{model}».", model=self.model)) from e
         except anthropic.NotFoundError as e:
-            raise ProviderError(f"El modelo «{self.model}» no existe o tu cuenta no tiene acceso.") from e
+            raise ProviderError(tr("El modelo «{model}» no existe o tu cuenta no tiene acceso.", model=self.model)) from e
         except anthropic.RateLimitError as e:
-            raise RateLimitError("Anthropic está limitando las peticiones (demasiadas o sin saldo). "
-                                 "Espera un poco o revisa tu saldo en console.anthropic.com.") from e
+            raise RateLimitError(tr("Anthropic está limitando las peticiones (demasiadas o sin saldo). "
+                                 "Espera un poco o revisa tu saldo en console.anthropic.com.")) from e
         except anthropic.BadRequestError as e:
-            raise ProviderError(f"Anthropic rechazó la petición: {e.message}") from e
+            raise ProviderError(tr("Anthropic rechazó la petición: {message}", message=e.message)) from e
         except anthropic.APIStatusError as e:
-            raise ProviderError(f"Error del servidor de Anthropic ({e.status_code}). Prueba de nuevo más tarde.") from e
+            raise ProviderError(tr("Error del servidor de Anthropic ({status_code}). Prueba de nuevo más tarde.", status_code=e.status_code)) from e
         except anthropic.APIConnectionError as e:
-            raise ConnectionProblem("No se pudo conectar con Anthropic. Revisa tu conexión a internet.") from e
+            raise ConnectionProblem(tr("No se pudo conectar con Anthropic. Revisa tu conexión a internet.")) from e
 
         if msg.stop_reason == "refusal":
-            raise RefusalError("Claude no quiso traducir este fragmento (filtro de seguridad). "
-                               "Puedes traducirlo a mano o probar con otro modelo.")
+            raise RefusalError(tr("Claude no quiso traducir este fragmento (filtro de seguridad). "
+                               "Puedes traducirlo a mano o probar con otro modelo."))
         text = "".join(block.text for block in msg.content if block.type == "text")
         u = msg.usage
         usage = Usage(

@@ -1,0 +1,61 @@
+// Control de calidad en la interfaz, con la IA simulada y el libro inventado.
+import { createRequire } from "module";
+const require = createRequire(process.env.NODE_PATH + "/");
+const { chromium } = require("playwright");
+const [url, work, shots] = process.argv.slice(2);
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+const errors = [];
+page.on("pageerror", (e) => errors.push(String(e)));
+page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+const waitTaskDone = async () => {
+  await page.waitForTimeout(500);
+  await page.waitForFunction(() => document.querySelector("#taskbar").hidden === true, null, { timeout: 30000 });
+  await page.waitForTimeout(600);
+};
+await page.goto(url);
+await page.waitForSelector("text=Nuevo proyecto");
+await page.fill("#new-epub", `${work}/book.epub`);
+await page.fill("#new-folder", `${work}/proyecto`);
+await page.click("text=Crear proyecto");
+await page.waitForSelector("text=Progreso:");
+await page.click("#sidebar >> text=Referencias");
+await page.fill("#ref-src", `${work}/ref_en.epub`);
+await page.fill("#ref-tgt", `${work}/ref_es.epub`);
+await page.click("text=Emparejar");
+await waitTaskDone();
+await page.click("#sidebar >> text=Inteligencia artificial");
+await page.click("label:has-text('Ollama')");
+await page.fill("#ai-model", "modelo-de-prueba");
+await page.click("button:text-is('Guardar')");
+await page.waitForSelector("text=Ajustes de IA guardados");
+await page.click("#sidebar >> text=Estilo y glosario");
+await page.click(".tabs >> text=Generar con IA");
+await page.click("button:text-is('Generar')");
+await waitTaskDone();
+await page.click("#sidebar >> text=Capítulos");
+await page.click("text=Traducir el siguiente capítulo");
+await waitTaskDone();
+await page.click("#sidebar >> text=Calidad");
+await page.waitForSelector(".qa-summary");
+console.log("chips:", (await page.locator(".qa-chip").allTextContents()).join(" | "));
+console.log("filas:", await page.locator(".qa-row").count());
+await page.evaluate(() => { document.querySelector("#toast").textContent = ""; });
+await page.screenshot({ path: `${shots}/qa-page.png` });
+// Revisar el primer aviso: abre la revisión y resalta el párrafo.
+await page.click(".qa-row >> nth=0 >> button:text-is('Revisar')");
+await page.waitForSelector(".seg.flash");
+console.log("chips en la revisión:", await page.locator(".seg .meta .qa").count());
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${shots}/qa-review.png` });
+// Ignorar desde la revisión.
+const before = await page.locator(".seg .meta .qa").count();
+await page.click(".seg .meta .qa >> nth=0 >> button.qa-x");
+await page.waitForTimeout(400);
+console.log("tras ignorar:", before, "→", await page.locator(".seg .meta .qa").count());
+// Exportar avisa de los errores.
+await page.click("#sidebar >> text=Exportar");
+await page.waitForTimeout(800);
+console.log("aviso en exportar:", await page.locator("text=El control de calidad encontró").count());
+console.log("errores:", errors.length ? errors : "ninguno");
+await browser.close();

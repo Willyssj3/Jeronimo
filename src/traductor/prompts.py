@@ -1,27 +1,30 @@
 """Instrucciones que se envían a la IA y lectura de sus respuestas.
 
 Las instrucciones van en inglés (los modelos las siguen con más precisión);
-las notas para el usuario se piden en español."""
+las notas para el usuario, en el idioma de la interfaz."""
 
 from __future__ import annotations
 
 import json
 import re
 
+from .i18n import N_, notes_language
+
+# Nombre en inglés (para las instrucciones) y en español (para la interfaz, que lo traduce).
 LANG_NAMES = {
-    "en": ("English", "inglés"),
-    "es": ("Spanish", "español"),
-    "pt": ("Portuguese", "portugués"),
-    "fr": ("French", "francés"),
-    "it": ("Italian", "italiano"),
-    "de": ("German", "alemán"),
-    "ca": ("Catalan", "catalán"),
-    "gl": ("Galician", "gallego"),
-    "eu": ("Basque", "euskera"),
-    "nl": ("Dutch", "neerlandés"),
-    "ja": ("Japanese", "japonés"),
-    "zh": ("Chinese", "chino"),
-    "ru": ("Russian", "ruso"),
+    "en": ("English", N_("inglés")),
+    "es": ("Spanish", N_("español")),
+    "pt": ("Portuguese", N_("portugués")),
+    "fr": ("French", N_("francés")),
+    "it": ("Italian", N_("italiano")),
+    "de": ("German", N_("alemán")),
+    "ca": ("Catalan", N_("catalán")),
+    "gl": ("Galician", N_("gallego")),
+    "eu": ("Basque", N_("euskera")),
+    "nl": ("Dutch", N_("neerlandés")),
+    "ja": ("Japanese", N_("japonés")),
+    "zh": ("Chinese", N_("chino")),
+    "ru": ("Russian", N_("ruso")),
 }
 
 VARIANTS = {
@@ -68,7 +71,7 @@ Format rules:
 - Never merge or split segments, even when a sentence continues in the next segment.
 - Apply the glossary exactly. Names that are not in the glossary keep their original form unless the style guide says otherwise.
 - Follow the punctuation and typography of the style guide (for example, dialogue dashes and quotation marks).
-- If something is genuinely doubtful (wordplay, ambiguous reference, cultural allusion, possible error in the original), translate it as well as you can and explain the doubt briefly, in Spanish, in a final block: <notes><note id="N">…</note></notes>. Omit the block when there are no doubts.
+- If something is genuinely doubtful (wordplay, ambiguous reference, cultural allusion, possible error in the original), translate it as well as you can and explain the doubt briefly, in {notes_lang}, in a final block: <notes><note id="N">…</note></notes>. Omit the block when there are no doubts.
 
 # Style guide
 {style_guide}
@@ -91,6 +94,7 @@ def translate_system(*, title: str, author: str, src: str, tgt: str, variant: st
         variant=variant_line(variant, tgt),
         style_guide=style_guide.strip() or NO_STYLE_GUIDE.format(tgt=lang_name(tgt)),
         synopsis=synopsis.strip() or NO_SYNOPSIS,
+        notes_lang=notes_language(),
     )
 
 
@@ -193,7 +197,7 @@ Do not rewrite for personal taste, do not simplify or modernize the author's sty
 
 Format rules:
 - The input comes as <seg id="N"><source>…</source><translation>…</translation></seg>.
-- For each segment that needs changes, answer <fix id="N"><text>the complete corrected translation of that segment</text><why>a very short reason, in Spanish</why></fix>.
+- For each segment that needs changes, answer <fix id="N"><text>the complete corrected translation of that segment</text><why>a very short reason, in {notes_lang}</why></fix>.
 - In <text>, keep every <gN>…</gN> and <xN/> tag of the translation exactly once (move <gN> pairs with their words if needed) and keep &amp; &lt; &gt; escaped.
 - Write nothing for segments that are fine. If no segment needs changes, answer only <nofixes/>.
 
@@ -220,6 +224,7 @@ def review_system(*, title: str, author: str, src: str, tgt: str, variant: str,
         variant=variant_line(variant, tgt),
         style_guide=style_guide.strip() or NO_STYLE_GUIDE.format(tgt=lang_name(tgt)),
         synopsis=synopsis.strip() or NO_SYNOPSIS,
+        notes_lang=notes_language(),
     )
 
 
@@ -266,7 +271,7 @@ ANALYST_SYSTEM = "You are an expert in literary translation and translation anal
 
 STYLE_GUIDE_USER = """\
 Below are aligned passages from books by {author}: the original {src} text and the official, published {tgt} translation.
-Study the translator's choices and write a practical style guide, in Spanish, that would allow another translator to produce translations indistinguishable from this translator's work. Cover, when the passages show it:
+Study the translator's choices and write a practical style guide, in {notes_lang}, that would allow another translator to produce translations indistinguishable from this translator's work. Cover, when the passages show it:
 1. Variety of {tgt} (country/region) and forms of address (tú/usted/vos; vosotros/ustedes), including how characters address each other.
 2. Dialogue and typography: dialogue dashes or quotation marks, type of quotes, punctuation of dialogue tags, italics, numbers, measurements.
 3. Proper names, nicknames, titles, places and invented terms: kept, adapted or translated? How are honorifics (Mr., Mrs., Sir, Lady…) handled?
@@ -280,7 +285,7 @@ Illustrate with brief examples quoting only a few words at a time; do not copy w
 GLOSSARY_USER = """\
 Below are candidate terms (names, places, titles, invented words) from books by {author}, each with aligned passages from the original {src} text and the official {tgt} translation.
 For each term, state how the official translation renders it. Reply with one JSON object per line and nothing else:
-{{"term": "...", "translation": "...", "type": "persona|lugar|organización|objeto|título|otro", "note": "short note in Spanish"}}
+{{"term": "...", "translation": "...", "type": "persona|lugar|organización|objeto|título|otro", "note": "short note in {notes_lang}"}}
 If the term is kept unchanged, repeat it as the translation. Skip terms that are ordinary capitalized words or whose rendering the passages don't show.
 
 {terms}
@@ -289,16 +294,16 @@ If the term is kept unchanged, repeat it as the translation. Skip terms that are
 ANALYZE_USER = """\
 This is part {part} of {parts} of the book "{title}"{author_part}. Chapters are marked with [[CHAPTER id: title]].
 Reply with JSON only, no other text, with this structure:
-{{"summary": "summary of this part, in Spanish, 5-10 sentences",
- "chapters": [{{"id": "chapter id", "summary": "2-4 sentences in Spanish: what happens, who appears, who speaks to whom and in which tone"}}],
- "terms": [{{"term": "...", "type": "persona|lugar|organización|objeto|título|otro", "note": "short description in Spanish (e.g. gender, role, relationships)"}}]}}
+{{"summary": "summary of this part, in {notes_lang}, 5-10 sentences",
+ "chapters": [{{"id": "chapter id", "summary": "2-4 sentences in {notes_lang}: what happens, who appears, who speaks to whom and in which tone"}}],
+ "terms": [{{"term": "...", "type": "persona|lugar|organización|objeto|título|otro", "note": "short description in {notes_lang} (e.g. gender, role, relationships)"}}]}}
 In "terms", list the characters, places, organizations, titles, invented words and special expressions that a translator must keep consistent.
 
 {text}
 """
 
 SYNOPSIS_MERGE_USER = """\
-These are summaries of consecutive parts of the book "{title}". Combine them into a single synopsis in Spanish of 200–350 words that a translator can use as context: main characters (with gender and relationships), setting, tone and plot.
+These are summaries of consecutive parts of the book "{title}". Combine them into a single synopsis in {notes_lang} of 200–350 words that a translator can use as context: main characters (with gender and relationships), setting, tone and plot.
 
 {summaries}
 """
@@ -306,7 +311,7 @@ These are summaries of consecutive parts of the book "{title}". Combine them int
 PROPOSE_USER = """\
 These terms appear in the book "{title}", which is being translated from {src} into {tgt}. Following the style guide and the official glossary below, decide how to render each term. Keep proper names unchanged unless the style guide or the official glossary shows that this translator adapts them (for example meaningful names, titles, invented words).
 Reply with one JSON object per line and nothing else:
-{{"term": "...", "translation": "...", "note": "short note in Spanish"}}
+{{"term": "...", "translation": "...", "note": "short note in {notes_lang}"}}
 
 # Style guide
 {style_guide}

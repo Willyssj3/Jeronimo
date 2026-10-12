@@ -11,6 +11,7 @@ import urllib.error
 import urllib.request
 
 from .base import Completion, ConnectionProblem, Provider, ProviderError, Usage, strip_thinking
+from ..i18n import tr
 
 DEFAULT_URL = "http://localhost:11434"
 
@@ -22,7 +23,7 @@ class OllamaProvider(Provider):
     def __init__(self, model: str, *, base_url: str | None = None, num_ctx: int = 16384,
                  temperature: float = 0.2, timeout: float = 1800.0):
         if not model:
-            raise ProviderError("Elige un modelo de Ollama (por ejemplo, uno que hayas descargado con «ollama pull»).")
+            raise ProviderError(tr("Elige un modelo de Ollama (por ejemplo, uno que hayas descargado con «ollama pull»)."))
         self.model = model
         self.base_url = (base_url or DEFAULT_URL).rstrip("/")
         self.num_ctx = num_ctx
@@ -42,11 +43,11 @@ class OllamaProvider(Provider):
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")
             if e.code == 404:
-                raise ProviderError(f"Ollama no tiene el modelo «{self.model}». "
-                                    f"Descárgalo con: ollama pull {self.model}") from e
-            raise ProviderError(f"Ollama devolvió un error ({e.code}): {detail[:300]}") from e
+                raise ProviderError(tr("Ollama no tiene el modelo «{model}». Descárgalo con: ollama pull "
+                                       "{model}", model=self.model)) from e
+            raise ProviderError(tr("Ollama devolvió un error ({code}): {detail}", code=e.code, detail=detail[:300])) from e
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-            raise ConnectionProblem("No se pudo conectar con Ollama. ¿Está instalado y abierto?") from e
+            raise ConnectionProblem(tr("No se pudo conectar con Ollama. ¿Está instalado y abierto?")) from e
 
     def complete(self, system: str, user: str, *, max_tokens: int | None = None) -> Completion:
         data = self._request("/api/chat", {

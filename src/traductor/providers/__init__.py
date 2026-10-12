@@ -8,17 +8,18 @@ from pathlib import Path
 
 from .base import (AuthError, Completion, ConnectionProblem, Provider, ProviderError,
                    RateLimitError, RefusalError, Usage)
+from ..i18n import N_, tr
 
 KINDS = {
-    "anthropic": "Claude (Anthropic) — clave de API",
-    "gemini": "Google Gemini — tiene nivel gratuito",
-    "openai": "OpenAI — clave de API",
-    "openrouter": "OpenRouter — muchos modelos con una sola clave",
-    "deepseek": "DeepSeek — clave de API",
-    "ollama": "Ollama — local y gratis",
-    "lmstudio": "LM Studio — local y gratis",
-    "compatible": "Otro servidor compatible con OpenAI",
-    "manual": "Modo manual — copiar y pegar en el chat de tu IA",
+    "anthropic": N_("Claude (Anthropic) — clave de API"),
+    "gemini": N_("Google Gemini — tiene nivel gratuito"),
+    "openai": N_("OpenAI — clave de API"),
+    "openrouter": N_("OpenRouter — muchos modelos con una sola clave"),
+    "deepseek": N_("DeepSeek — clave de API"),
+    "ollama": N_("Ollama — local y gratis"),
+    "lmstudio": N_("LM Studio — local y gratis"),
+    "compatible": N_("Otro servidor compatible con OpenAI"),
+    "manual": N_("Modo manual — copiar y pegar en el chat de tu IA"),
 }
 
 ENV_KEYS = {
@@ -70,7 +71,7 @@ def save_api_key(kind: str, key: str) -> str:
         import keyring
 
         keyring.set_password(KEYRING_SERVICE, kind, key)
-        return "almacén seguro del sistema"
+        return tr("almacén seguro del sistema")
     except Exception:
         # Sin almacén seguro (algunos Linux): archivo local legible solo por el usuario.
         path = _keys_file()
@@ -84,7 +85,7 @@ def save_api_key(kind: str, key: str) -> str:
             path.chmod(0o600)
         except OSError:
             pass
-        return f"archivo local {path}"
+        return tr("archivo local {path}", path=path)
 
 
 def make_provider(cfg: dict, api_key: str | None = None) -> Provider:
@@ -92,7 +93,7 @@ def make_provider(cfg: dict, api_key: str | None = None) -> Provider:
     kind = cfg.get("tipo") or "anthropic"
     model = cfg.get("modelo") or ""
     if kind == "manual":
-        raise ProviderError("Estás en modo manual: usa «Copiar bloque» y «Pegar respuesta» en la revisión del capítulo.")
+        raise ProviderError(tr("Estás en modo manual: usa «Copiar bloque» y «Pegar respuesta» en la revisión del capítulo."))
     if kind == "anthropic":
         from .anthropic_provider import DEFAULT_MODEL, AnthropicProvider
 
@@ -111,7 +112,7 @@ def make_provider(cfg: dict, api_key: str | None = None) -> Provider:
         return OpenAICompatProvider(kind, model, api_key=api_key or get_api_key(kind),
                                     base_url=cfg.get("base_url"),
                                     temperature=float(temp) if temp is not None else None)
-    raise ProviderError(f"Proveedor desconocido: {kind}")
+    raise ProviderError(tr("Proveedor desconocido: {kind}", kind=kind))
 
 
 __all__ = [

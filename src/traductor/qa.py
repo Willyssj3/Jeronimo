@@ -18,19 +18,20 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 
 from .inline import strip_marks
+from .i18n import N_, tr
 
 # clave → (nombre para mostrar, nivel)
 KINDS: dict[str, tuple[str, str]] = {
-    "glosario": ("Glosario no respetado", "error"),
-    "igual": ("Igual que el original", "error"),
-    "restos": ("Palabras sin traducir", "error"),
-    "signos": ("Signos de apertura", "error"),
-    "numeros": ("Números distintos", "aviso"),
-    "longitud": ("Posible omisión o añadido", "aviso"),
-    "dialogo": ("Rayas de diálogo", "aviso"),
-    "espacios": ("Espacios y puntuación", "aviso"),
-    "nombres": ("Nombres con varias grafías", "aviso"),
-    "formato": ("Formato", "aviso"),
+    "glosario": (N_("Glosario no respetado"), "error"),
+    "igual": (N_("Igual que el original"), "error"),
+    "restos": (N_("Palabras sin traducir"), "error"),
+    "signos": (N_("Signos de apertura"), "error"),
+    "numeros": (N_("Números distintos"), "aviso"),
+    "longitud": (N_("Posible omisión o añadido"), "aviso"),
+    "dialogo": (N_("Rayas de diálogo"), "aviso"),
+    "espacios": (N_("Espacios y puntuación"), "aviso"),
+    "nombres": (N_("Nombres con varias grafías"), "aviso"),
+    "formato": (N_("Formato"), "aviso"),
 }
 
 # Palabras muy frecuentes del inglés que no existen en las lenguas de destino
@@ -164,61 +165,62 @@ class Checker:
 
         for entry in self.glossary:
             if entry.source_re.search(src) and not entry.respected(tgt):
-                left = " (quedó sin traducir)" if entry.term != entry.translation and entry.source_re.search(tgt) else ""
-                add("glosario", f"«{entry.term}» debería traducirse «{entry.translation}»{left}.")
+                left = tr(" (quedó sin traducir)") if entry.term != entry.translation and entry.source_re.search(tgt) else ""
+                add("glosario", tr("«{term}» debería traducirse «{translation}»{left}.", term=entry.term, translation=entry.translation, left=left))
 
         src_words = WORD_RE.findall(src)
         if len(src_words) >= 4 and norm(src).strip() == norm(tgt).strip():
-            add("igual", "La traducción es igual que el original.")
+            add("igual", tr("La traducción es igual que el original."))
 
         if self.leftovers:
             left = sorted({w for w in WORD_RE.findall(tgt) if w in self.leftovers})
             if left:
-                add("restos", "Posibles palabras en inglés: " + ", ".join(f"«{w}»" for w in left[:6]) + ".")
+                add("restos", tr("Posibles palabras en inglés: {palabras}.", palabras=", ".join(f"«{w}»" for w in left[:6])))
 
         if self.spanish:
             for close, opening in (("?", "¿"), ("!", "¡")):
                 if tgt.count(close) > tgt.count(opening):
-                    add("signos", f"Falta el signo de apertura «{opening}».")
+                    add("signos", tr("Falta el signo de apertura «{opening}».", opening=opening))
 
         src_nums, tgt_nums = _numbers(src), _numbers(tgt)
         extra = [k for k in tgt_nums if k not in src_nums]
         if tgt_nums and (extra or any(k not in tgt_nums for k in src_nums)):
             shown = extra or [k for k in src_nums if k not in tgt_nums]
-            add("numeros", "Los números no coinciden con el original" + (f" ({', '.join(shown[:4])})" if shown else "") + ".")
+            add("numeros", tr("Los números no coinciden con el original ({numeros}).", numeros=", ".join(shown[:4]))
+                if shown else tr("Los números no coinciden con el original."))
 
         if len(src) >= 80 and tgt.strip():
             ratio = len(tgt) / len(src)
             if ratio < 0.55 * self.ratio:
-                add("longitud", "Mucho más corto que el original: puede faltar texto.")
+                add("longitud", tr("Mucho más corto que el original: puede faltar texto."))
             elif ratio > 1.8 * self.ratio:
-                add("longitud", "Mucho más largo que el original: revisa si hay añadidos.")
+                add("longitud", tr("Mucho más largo que el original: revisa si hay añadidos."))
 
         if self.spanish:
             stripped = tgt.lstrip()
             if re.match(r"[-–]\s*[^\W\d_¿¡]|[-–]\s*[¿¡]", stripped):
-                add("dialogo", "Diálogo con guion: en español se usa la raya (—).")
+                add("dialogo", tr("Diálogo con guion: en español se usa la raya (—)."))
             elif re.search(r"[^\W\d_][.,!?…]?\s[-–]\s?[^\W\d_]", tgt) and src.lstrip()[:1] in "“\"‘'«—":
-                add("dialogo", "Inciso del narrador con guion: usa la raya (—).")
+                add("dialogo", tr("Inciso del narrador con guion: usa la raya (—)."))
         if self.dialogue_style and src.lstrip()[:1] in "“\"‘'«":
             first = tgt.lstrip()[:1]
             if self.dialogue_style == "raya" and first in "“\"«‘'":
-                add("dialogo", "Este diálogo va entre comillas; el resto del libro usa raya.")
+                add("dialogo", tr("Este diálogo va entre comillas; el resto del libro usa raya."))
             elif self.dialogue_style == "comillas" and first == "—":
-                add("dialogo", "Este diálogo va con raya; el resto del libro usa comillas.")
+                add("dialogo", tr("Este diálogo va con raya; el resto del libro usa comillas."))
 
         spacing = []
         if re.search(r"\S {2,}\S", tgt):
-            spacing.append("espacios dobles")
+            spacing.append(tr("espacios dobles"))
         if re.search(r"\s[,;:]|\s\.(?!\.)", tgt):
-            spacing.append("espacio antes de un signo")
+            spacing.append(tr("espacio antes de un signo"))
         if re.search(r"[¿¡«]\s", tgt) or re.search(r"\s[?!»]", tgt):
-            spacing.append("espacio junto a ¿ ? ¡ ! « »")
+            spacing.append(tr("espacio junto a ¿ ? ¡ ! « »"))
         if spacing:
-            add("espacios", "Revisa: " + ", ".join(spacing) + ".")
+            add("espacios", tr("Revisa: {lista}.", lista=", ".join(spacing)))
 
         for warning in seg.get("avisos") or []:
-            add("formato", warning)
+            add("formato", tr(warning))
 
         ignored = set(seg.get("qa_ignorar") or [])
         return [i for i in found if i.tipo not in ignored]
@@ -246,7 +248,7 @@ class Checker:
             listing = " y ".join(f"«{w}» ({c})" for w, c in ranked[:4])
             for word, _count in ranked[1:]:
                 doc, n = first_seen[word]
-                found.append(Issue(doc, n, "nombres", f"Mismo nombre escrito de varias formas: {listing}.", key))
+                found.append(Issue(doc, n, "nombres", tr("Mismo nombre escrito de varias formas: {listing}.", listing=listing), key))
         return found
 
     def run(self, only: int | None = None) -> list[Issue]:
@@ -268,7 +270,7 @@ def check_project(project, only: int | None = None) -> dict:
                       target_lang=project.target_lang,
                       ignored_names=project.config.get("qa_nombres_ignorados", []))
     issues = checker.run(only)
-    titles = {c["doc"]: c.get("titulo") or f"Documento {c['doc']}" for c in chapters}
+    titles = {c["doc"]: c.get("titulo") or tr("Documento {doc}", doc=c['doc']) for c in chapters}
     texts = {(c["doc"], s["n"]): strip_marks(s.get("tgt") or "") for c in chapters for s in c["segmentos"]}
     checked = sum(1 for c in checker.chapters if only is None or c["doc"] == only
                   for s in c["segmentos"] if s.get("tgt"))
@@ -281,13 +283,13 @@ def check_project(project, only: int | None = None) -> dict:
         row["fragmento"] = text if len(text) <= 160 else text[:157].rsplit(" ", 1)[0] + "…"
         rows.append(row)
     return {"problemas": rows, "resumen": dict(Counter(i.tipo for i in issues)), "parrafos": checked,
-            "tipos": {k: {"nombre": v[0], "nivel": v[1]} for k, v in KINDS.items()}}
+            "tipos": {k: {"nombre": tr(v[0]), "nivel": v[1]} for k, v in KINDS.items()}}
 
 
 def ignore(project, doc: int, n: int, kind: str, key: str = "") -> None:
     """No volver a avisar de este tipo de problema en ese párrafo (o de ese nombre)."""
     if kind not in KINDS:
-        raise ValueError(f"Tipo de aviso desconocido: {kind}")
+        raise ValueError(tr("Tipo de aviso desconocido: {kind}", kind=kind))
     if kind == "nombres" and key:
         names = project.config.setdefault("qa_nombres_ignorados", [])
         if key not in names:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from ..i18n import tr
 from .api import Api, Bridge, _log_error
 from .server import UI_DIR, serve
 
@@ -17,9 +18,10 @@ def _say(msg: str) -> None:
 
 def run_browser(port: int = 0, open_browser: bool = True) -> int:
     api = Api(mode="navegador")
+    api.init_language()
     server, url = serve(api, port=port, open_browser=open_browser)
-    _say(f"Jerónimo abierto en {url}")
-    _say("Para salir, pulsa «Salir» en la app o cierra esta ventana.")
+    _say(tr("Jerónimo abierto en {url}", url=url))
+    _say(tr("Para salir, pulsa «Salir» en la app o cierra esta ventana."))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -43,9 +45,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_browser(args.puerto, not args.sin_abrir)
 
     api = Api(mode="escritorio")
+    api.init_language()
     try:
         window = webview.create_window(
-            "Jerónimo — Traductor de libros", url=str(UI_DIR / "index.html"), js_api=Bridge(api),
+            tr("Jerónimo — Traductor de libros"), url=str(UI_DIR / "index.html"), js_api=Bridge(api),
             width=1280, height=840, min_size=(960, 640), text_select=True)
         api._window = window
         webview.start()

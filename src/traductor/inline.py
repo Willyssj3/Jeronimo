@@ -20,6 +20,7 @@ import re
 from dataclasses import dataclass, field
 
 from lxml import etree
+from .i18n import N_
 
 # Elementos que se copian siempre tal cual, sin traducir su contenido.
 ATOMIC_TAGS = {
@@ -216,9 +217,9 @@ def repair(marked_text: str, slots: dict) -> tuple[str, list[str]]:
             return ""
 
         if bad_pairs:
-            warnings.append("se perdió parte del formato (cursiva, negrita o enlace)")
+            warnings.append(N_("se perdió parte del formato (cursiva, negrita o enlace)"))
         if unknown:
-            warnings.append("se eliminaron marcas desconocidas")
+            warnings.append(N_("se eliminaron marcas desconocidas"))
         text = TOKEN_RE.sub(fix, text)
 
     # Elementos fijos: exactamente una vez cada uno.
@@ -235,16 +236,16 @@ def repair(marked_text: str, slots: dict) -> tuple[str, list[str]]:
     before = text
     text = TOKEN_RE.sub(dedupe, text)
     if text != before:
-        warnings.append("había elementos fijos repetidos")
+        warnings.append(N_("había elementos fijos repetidos"))
     missing = [n for n, (kind, _el) in sorted(slots.items()) if kind == "x" and n not in seen]
     if missing:
         text = text.rstrip(" ") + "".join(f"<x{n}/>" for n in missing)
-        warnings.append("se recolocó al final un elemento fijo (imagen, nota o salto de línea)")
+        warnings.append(N_("se recolocó al final un elemento fijo (imagen, nota o salto de línea)"))
     if any(kind == "g" for kind, _el in slots.values()):
         present = {n for _m, kind, n in _tokens(text) if kind == "open"}
         if any(kind == "g" and n not in present for n, (kind, _el) in slots.items()):
             if "se perdió parte del formato (cursiva, negrita o enlace)" not in warnings:
-                warnings.append("se perdió parte del formato (cursiva, negrita o enlace)")
+                warnings.append(N_("se perdió parte del formato (cursiva, negrita o enlace)"))
     return text, warnings
 
 

@@ -11,6 +11,7 @@ import re
 
 from . import inline, prompts
 from .translate import Options, Translator, pseudo_slots
+from .i18n import tr
 
 
 def _same(a: str, b: str) -> bool:
@@ -85,7 +86,7 @@ class Reviewer:
 
     def review_chapter(self, index: int, *, progress=None, should_stop=None) -> dict:
         if self.provider is None:
-            raise ValueError("No hay un proveedor de IA configurado.")
+            raise ValueError(tr("No hay un proveedor de IA configurado."))
         data = self.project.load_chapter(index)
         chunks = self.chunks(data, self.translator.options.chunk_chars * 2)
         found = 0
@@ -97,7 +98,7 @@ class Reviewer:
             result = self.translator._call(self.system, self.build_user(data, chunk))
             self.project.record_usage(result.model or self.provider.model, result.usage)
             if not prompts.looks_like_review(result.text) and not result.truncated:
-                self.log("La respuesta no tenía el formato esperado; ese bloque queda sin revisar.")
+                self.log(tr("La respuesta no tenía el formato esperado; ese bloque queda sin revisar."))
                 continue
             found += self.apply_response(chunk, result.text)
             self.project.save_chapter(data)
@@ -121,12 +122,12 @@ class Reviewer:
         """Importa la respuesta del chat para el bloque que se copió (el primero pendiente)."""
         text = prompts.strip_code_fences(response)
         if not prompts.looks_like_review(text):
-            raise ValueError("No encontré correcciones (<fix …>) ni <nofixes/> en lo que pegaste. "
-                             "Copia la respuesta completa con el botón del bloque de código.")
+            raise ValueError(tr("No encontré correcciones (<fix …>) ni <nofixes/> en lo que pegaste. "
+                             "Copia la respuesta completa con el botón del bloque de código."))
         data = self.project.load_chapter(index)
         chunks = self.chunks(data, block_chars or self.translator.manual_block_chars())
         if not chunks:
-            raise ValueError("Este capítulo ya está revisado.")
+            raise ValueError(tr("Este capítulo ya está revisado."))
         ids = set(prompts.parse_fixes(text))
         chunk = chunks[0]
         # Si la respuesta se cortó, los párrafos posteriores a la última corrección quedan pendientes.

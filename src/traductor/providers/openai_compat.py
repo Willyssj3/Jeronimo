@@ -7,6 +7,7 @@ import openai
 
 from .base import (AuthError, Completion, ConnectionProblem, Provider, ProviderError,
                    RateLimitError, Usage, strip_thinking)
+from ..i18n import N_, tr
 
 # tipo -> (URL base, ¿es local?, modelo sugerido)
 PRESETS: dict[str, tuple[str | None, bool, str]] = {
@@ -24,7 +25,7 @@ NAMES = {
     "openrouter": "OpenRouter",
     "deepseek": "DeepSeek",
     "lmstudio": "LM Studio",
-    "compatible": "el servidor",
+    "compatible": N_("el servidor"),
 }
 
 
@@ -32,17 +33,17 @@ class OpenAICompatProvider(Provider):
     def __init__(self, kind: str, model: str, *, api_key: str | None = None, base_url: str | None = None,
                  temperature: float | None = None, max_retries: int = 4, timeout: float = 900.0):
         if kind not in PRESETS:
-            raise ProviderError(f"Proveedor desconocido: {kind}")
+            raise ProviderError(tr("Proveedor desconocido: {kind}", kind=kind))
         default_url, local, default_model = PRESETS[kind]
         self.kind = kind
         self.model = model or default_model
         if not self.model:
-            raise ProviderError(f"Elige un modelo para {NAMES[kind]}.")
+            raise ProviderError(tr("Elige un modelo para {name}.", name=tr(NAMES[kind])))
         self.base_url = base_url or default_url
         if not self.base_url:
-            raise ProviderError("Indica la dirección (URL) del servidor compatible con OpenAI.")
+            raise ProviderError(tr("Indica la dirección (URL) del servidor compatible con OpenAI."))
         if not local and not api_key and kind != "compatible":
-            raise AuthError(f"Falta la clave de API de {NAMES[kind]}.")
+            raise AuthError(tr("Falta la clave de API de {name}.", name=tr(NAMES[kind])))
         self.local = local or self.base_url.startswith(("http://localhost", "http://127.0.0.1"))
         self.temperature = temperature if temperature is not None else (0.2 if self.local else None)
         self.max_output = 4096 if self.local else 16000
@@ -61,29 +62,30 @@ class OpenAICompatProvider(Provider):
             kwargs["max_tokens"] = limit
         if self.temperature is not None:
             kwargs["temperature"] = self.temperature
-        name = NAMES[self.kind]
+        name = tr(NAMES[self.kind])
         try:
             r = self.client.chat.completions.create(**kwargs)
         except openai.AuthenticationError as e:
-            raise AuthError(f"La clave de API de {name} no es válida.") from e
+            raise AuthError(tr("La clave de API de {name} no es válida.", name=name)) from e
         except openai.PermissionDeniedError as e:
-            raise AuthError(f"Tu clave de {name} no tiene permiso para usar «{self.model}».") from e
+            raise AuthError(tr("Tu clave de {name} no tiene permiso para usar «{model}».", name=name, model=self.model)) from e
         except openai.NotFoundError as e:
-            raise ProviderError(f"{name} no encuentra el modelo «{self.model}».") from e
+            raise ProviderError(tr("{name} no encuentra el modelo «{model}».", name=name, model=self.model)) from e
         except openai.RateLimitError as e:
-            raise RateLimitError(f"{name} está limitando las peticiones (límite gratuito o sin saldo). "
-                                 "Espera un poco y vuelve a intentarlo.") from e
+            raise RateLimitError(tr("{name} está limitando las peticiones (límite gratuito o sin saldo). "
+                                    "Espera un poco y vuelve a intentarlo.", name=name)) from e
         except openai.BadRequestError as e:
-            raise ProviderError(f"{name} rechazó la petición: {e.message}") from e
+            raise ProviderError(tr("{name} rechazó la petición: {message}", name=name, message=e.message)) from e
         except openai.APIStatusError as e:
-            raise ProviderError(f"Error de {name} ({e.status_code}). Prueba de nuevo más tarde.") from e
+            raise ProviderError(tr("Error de {name} ({status_code}). Prueba de nuevo más tarde.", name=name, status_code=e.status_code)) from e
         except openai.APIConnectionError as e:
             if self.local:
-                raise ConnectionProblem(f"No se pudo conectar con {name}. ¿Está abierto y con el servidor activado?") from e
-            raise ConnectionProblem(f"No se pudo conectar con {name}. Revisa tu conexión a internet.") from e
+                raise ConnectionProblem(tr("No se pudo conectar con {name}. ¿Está abierto y con el servidor "
+                                           "activado?", name=name)) from e
+            raise ConnectionProblem(tr("No se pudo conectar con {name}. Revisa tu conexión a internet.", name=name)) from e
 
         if not r.choices:
-            raise ProviderError(f"{name} devolvió una respuesta vacía.")
+            raise ProviderError(tr("{name} devolvió una respuesta vacía.", name=name))
         choice = r.choices[0]
         text = strip_thinking(choice.message.content or "")
         usage = Usage()

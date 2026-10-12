@@ -17,9 +17,10 @@ from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
 
-from .. import __version__, inline, knowledge, profiles, qa, review, updates
+from .. import __version__, i18n, inline, knowledge, profiles, qa, review, updates
 from .. import search as finder
 from ..epub import EpubBook, EpubError
+from ..i18n import N_, tr
 from ..pdf2epub import PdfError
 from ..inline import localname
 from ..project import Project, read_json, slugify, write_json
@@ -44,15 +45,17 @@ class TaskRunner:
 
     @staticmethod
     def _empty() -> dict:
-        return {"activa": False, "nombre": "", "progreso": 0.0, "mensaje": "", "registro": [],
+        return {"activa": False, "nombre": "", "clave": "", "progreso": 0.0, "mensaje": "", "registro": [],
                 "error": None, "resultado": None, "capitulo": None, "terminada": None}
 
-    def start(self, name: str, fn) -> None:
+    def start(self, name: str, fn, key: str = "") -> None:
+        """``name`` es el nombre visible (en español, se traduce) y ``key`` una clave fija
+        para que la interfaz reconozca la tarea sin depender del idioma."""
         with self._lock:
             if self.state["activa"]:
-                raise ValueError(f"Ya hay una tarea en curso: {self.state['nombre']}. Espera o detenla.")
+                raise ValueError(tr("Ya hay una tarea en curso: {nombre}. Espera o detenla.", nombre=self.state['nombre']))
             self.state = self._empty()
-            self.state.update(activa=True, nombre=name, mensaje="Empezando…")
+            self.state.update(activa=True, nombre=tr(name), clave=key, mensaje=tr("Empezando…"))
             self._cancel.clear()
         threading.Thread(target=self._run, args=(fn,), daemon=True).start()
 
@@ -60,14 +63,14 @@ class TaskRunner:
         try:
             result = fn(self)
             self.state["resultado"] = result
-            self.state["mensaje"] = "Detenida." if self._cancel.is_set() else "Terminada."
+            self.state["mensaje"] = tr("Detenida.") if self._cancel.is_set() else tr("Terminada.")
             if not self._cancel.is_set():
                 self.state["progreso"] = 1.0
         except (ProviderError, EpubError, PdfError, ValueError, KeyError, FileNotFoundError) as e:
             self.state["error"] = str(e)
-            self.log(f"Error: {e}")
+            self.log(tr("Error: {error}", error=e))
         except Exception as e:  # pragma: no cover - errores imprevistos
-            self.state["error"] = f"Error inesperado: {e}"
+            self.state["error"] = tr("Error inesperado: {error}", error=e)
             self.log(self.state["error"])
             _log_error(traceback.format_exc())
         finally:
@@ -92,7 +95,7 @@ class TaskRunner:
     def cancel(self) -> None:
         if self.state["activa"]:
             self._cancel.set()
-            self.log("Deteniendo al terminar el bloque actual…")
+            self.log(tr("Deteniendo al terminar el bloque actual…"))
 
 
 def _log_error(text: str) -> None:
@@ -140,20 +143,40 @@ class Api:
         return {
             "version": __version__,
             "modo": self._mode,
-            "proveedores": KINDS,
-            "idiomas": {k: v[1] for k, v in LANG_NAMES.items()},
+            "idioma_ui": i18n.language(),
+            "proveedores": {k: tr(v) for k, v in KINDS.items()},
+            "idiomas": {k: tr(v[1]) for k, v in LANG_NAMES.items()},
             "variantes": list(VARIANTS),
-            "modelos_claude": SUGGESTED_MODELS,
-            "chats": [{"id": k, "nombre": v[0], "bloque": v[1],
-                       "modelos": [{"id": m, "nombre": n, "nivel": tier} for m, n, tier in chat_models(k)]}
+            "modelos_claude": [(m, tr(label)) for m, label in SUGGESTED_MODELS],
+            "chats": [{"id": k, "nombre": tr(v[0]), "bloque": v[1],
+                       "modelos": [{"id": m, "nombre": tr(n), "nivel": tier} for m, n, tier in chat_models(k)]}
                       for k, v in CHAT_PRESETS.items()],
-            "planes": [{"id": k, "nombre": v} for k, v in PLANS.items()],
+            "planes": [{"id": k, "nombre": tr(v)} for k, v in PLANS.items()],
             "carpeta_por_defecto": str(default_projects_dir()),
             "perfiles": profiles.list_profiles(),
             "recientes": [dict(r, existe=(Path(r["carpeta"]) / "proyecto.json").exists())
                           for r in self._settings().get("recientes", [])],
             "proyecto_abierto": str(self._project.root) if self._project else None,
         }
+
+    # -- idioma de la interfaz ---------------------------------------------------
+
+    def init_language(self) -> str:
+        """Al abrir la app: el idioma guardado o, la primera vez, el del sistema."""
+        return i18n.set_language(self._settings().get("idioma_ui") or i18n.system_language())
+
+    def ui_strings(self) -> dict:
+        """Idioma actual y sus traducciones (las claves son los textos en español)."""
+        lang = i18n.language()
+        return {"idioma": lang, "idiomas": i18n.LANGS, "textos": i18n.catalog(lang)}
+
+    def set_ui_language(self, lang: str) -> str:
+        if lang not in i18n.LANGS:
+            raise ValueError(tr("Idioma desconocido."))
+        data = self._settings()
+        data["idioma_ui"] = lang
+        self._save_settings(data)
+        return i18n.set_language(lang)
 
     def choose_path(self, kind: str = "epub", directory: str = "") -> str | None:
         """Diálogo nativo para elegir archivo o carpeta (solo en modo escritorio)."""
@@ -165,14 +188,14 @@ class Api:
             result = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=directory)
         elif kind == "pdf":
             result = self._window.create_file_dialog(
-                webview.FileDialog.OPEN, directory=directory, file_types=("Documentos PDF (*.pdf)", "Todos (*.*)"))
+                webview.FileDialog.OPEN, directory=directory, file_types=(tr("Documentos PDF (*.pdf)"), tr("Todos (*.*)")))
         elif kind == "libro":
             result = self._window.create_file_dialog(
                 webview.FileDialog.OPEN, directory=directory,
-                file_types=("Libros (*.pdf;*.docx;*.txt;*.fb2;*.mobi;*.azw3;*.azw)", "Todos (*.*)"))
+                file_types=(tr("Libros (*.pdf;*.docx;*.txt;*.fb2;*.mobi;*.azw3;*.azw)"), tr("Todos (*.*)")))
         else:
             result = self._window.create_file_dialog(
-                webview.FileDialog.OPEN, directory=directory, file_types=("Libros EPUB (*.epub)", "Todos (*.*)"))
+                webview.FileDialog.OPEN, directory=directory, file_types=(tr("Libros EPUB (*.epub)"), tr("Todos (*.*)")))
         if not result:
             return None
         return result[0] if isinstance(result, (list, tuple)) else str(result)
@@ -180,7 +203,7 @@ class Api:
     def quit_app(self) -> bool:
         """Cierra la app en modo navegador (en modo ventana basta con cerrarla)."""
         if self._tasks.state["activa"]:
-            raise ValueError("Hay una tarea en curso. Detenla antes de salir.")
+            raise ValueError(tr("Hay una tarea en curso. Detenla antes de salir."))
         threading.Timer(0.5, os._exit, [0]).start()
         return True
 
@@ -209,7 +232,7 @@ class Api:
     def open_url(self, url: str) -> bool:
         """Abre en el navegador una página del proyecto (descargas, ayuda)."""
         if not (url == updates.REPO_URL or url.startswith(updates.REPO_URL + "/")):
-            raise ValueError("Solo se pueden abrir páginas del proyecto Jerónimo.")
+            raise ValueError(tr("Solo se pueden abrir páginas del proyecto Jerónimo."))
         return bool(webbrowser.open(url))
 
     def open_folder(self, path: str) -> bool:
@@ -237,64 +260,67 @@ class Api:
 
         pdf = Path(pdf_path.strip().strip('"'))
         if not pdf.is_file():
-            raise FileNotFoundError(f"No encuentro el archivo «{pdf}».")
+            raise FileNotFoundError(tr("No encuentro el archivo «{pdf}».", pdf=pdf))
         out = Path(out_path.strip().strip('"')) if out_path and out_path.strip() else pdf.with_suffix(".epub")
 
         def run(task: TaskRunner):
-            task.log(f"Convirtiendo «{pdf.name}»…")
+            task.log(tr("Convirtiendo «{name}»…", name=pdf.name))
             path, report = convert(pdf, out, progress=task.progress)
-            task.log(f"Listo: {report.chapters} capítulos, {report.notes} notas, "
-                     f"{report.removed_lines} encabezados o números de página quitados.")
+            task.log(tr("Listo: {chapters} capítulos, {notes} notas, {removed_lines} encabezados o números de "
+                        "página quitados.", chapters=report.chapters, notes=report.notes, removed_lines=report.removed_lines))
             for w in report.warnings:
-                task.log(f"Aviso: {w}")
+                task.log(tr("Aviso: {aviso}", aviso=w))
             return {"ruta": str(path), "paginas": report.pages, "capitulos": report.chapters,
                     "notas": report.notes, "lineas_quitadas": report.removed_lines,
                     "paginas_omitidas": report.dropped_pages, "avisos": report.warnings,
                     "titulo": report.title, "autor": report.author, "idioma": report.language}
 
-        self._tasks.start("Convertir PDF a EPUB", run)
+        self._tasks.start(N_("Convertir PDF a EPUB"), run, "convertir")
         return self.task_status()
 
     def convert_book(self, path: str, out_path: str = "", ocr_lang: str = "") -> dict:
         """Convierte a EPUB un PDF, Word, TXT, FB2, MOBI o AZW3 (en segundo plano)."""
         from ..convert import FORMATS, convert, kind_of
+        from ..pdf2epub import OCR_WARNING
 
         src = Path(path.strip().strip('"'))
         if not src.is_file():
-            raise FileNotFoundError(f"No encuentro el archivo «{src}».")
+            raise FileNotFoundError(tr("No encuentro el archivo «{src}».", src=src))
         kind = kind_of(src)
         if kind not in FORMATS or kind == ".epub":
-            raise ValueError("Elige un PDF, Word (DOCX), TXT, FB2, MOBI o AZW3."
-                             if kind != ".epub" else "Ese libro ya es un EPUB: úsalo directamente para crear el proyecto.")
+            raise ValueError(tr("Elige un PDF, Word (DOCX), TXT, FB2, MOBI o AZW3.")
+                             if kind != ".epub" else tr("Ese libro ya es un EPUB: úsalo directamente para crear el proyecto."))
         out = Path(out_path.strip().strip('"')) if out_path and out_path.strip() else None
 
         def run(task: TaskRunner):
-            task.log(f"Convirtiendo «{src.name}» ({FORMATS[kind]})…")
+            task.log(tr("Convirtiendo «{name}» ({formato})…", name=src.name, formato=tr(FORMATS[kind])))
             result, report = convert(src, out, progress=task.progress, ocr_lang=ocr_lang, should_stop=task.cancelled)
-            task.log(f"Listo: {report.chapters} capítulos, {report.notes} notas.")
+            task.log(tr("Listo: {chapters} capítulos, {notes} notas.", chapters=report.chapters, notes=report.notes))
             for w in report.warnings:
-                task.log(f"Aviso: {w}")
-            return {"ruta": str(result), "formato": FORMATS[kind], "paginas": report.pages,
+                task.log(tr("Aviso: {aviso}", aviso=w))
+            ocr_note = tr(OCR_WARNING, motor=report.ocr) if report.ocr else None
+            return {"ruta": str(result), "formato": tr(FORMATS[kind]), "paginas": report.pages,
                     "capitulos": report.chapters, "notas": report.notes, "lineas_quitadas": report.removed_lines,
-                    "paginas_omitidas": report.dropped_pages, "avisos": report.warnings,
+                    "paginas_omitidas": report.dropped_pages,
+                    "avisos": [w for w in report.warnings if w != ocr_note],
                     "titulo": report.title, "autor": report.author, "idioma": report.language,
                     "ocr": report.ocr}
 
-        self._tasks.start("Convertir a EPUB", run)
+        self._tasks.start(N_("Convertir a EPUB"), run, "convertir")
         return self.task_status()
 
     # -- proyectos -----------------------------------------------------------
 
     def _need_project(self) -> Project:
         if self._project is None:
-            raise ValueError("No hay ningún proyecto abierto.")
+            raise ValueError(tr("No hay ningún proyecto abierto."))
         return self._project
 
     def create_project(self, epub_path: str, folder: str = "", target_lang: str = "es",
                        variant: str = "auto", profile: str = "") -> dict:
         epub = Path(epub_path.strip().strip('"'))
         if not epub.is_file():
-            raise FileNotFoundError(f"No encuentro el archivo «{epub}».")
+            raise FileNotFoundError(tr("No encuentro el archivo «{epub}».", epub=epub))
         if not folder:
             with EpubBook(epub) as book:
                 folder = str(default_projects_dir() / slugify(book.title))
@@ -320,7 +346,7 @@ class Api:
 
     def close_project(self) -> bool:
         if self._tasks.state["activa"]:
-            raise ValueError("Espera a que termine la tarea en curso antes de cerrar el proyecto.")
+            raise ValueError(tr("Espera a que termine la tarea en curso antes de cerrar el proyecto."))
         self._project = None
         return True
 
@@ -333,18 +359,18 @@ class Api:
         if "chat_manual" in values:
             chat = values["chat_manual"]
             if chat not in CHAT_PRESETS:
-                raise ValueError("Chat desconocido.")
+                raise ValueError(tr("Chat desconocido."))
             if chat != opts.get("chat_manual"):
                 opts["modelo_manual"] = chat_models(chat)[0][0]  # el más capaz de ese chat
             opts["chat_manual"] = chat
         if "modelo_manual" in values:
             chat = opts.get("chat_manual") or "claude"
             if values["modelo_manual"] not in {m for m, _n, _t in chat_models(chat)}:
-                raise ValueError("Modelo desconocido para ese chat.")
+                raise ValueError(tr("Modelo desconocido para ese chat."))
             opts["modelo_manual"] = values["modelo_manual"]
         if "plan_manual" in values:
             if values["plan_manual"] not in PLANS:
-                raise ValueError("Plan desconocido.")
+                raise ValueError(tr("Plan desconocido."))
             opts["plan_manual"] = values["plan_manual"]
         if any(k in values for k in ("chat_manual", "modelo_manual", "plan_manual")) and "bloque_manual" not in values:
             opts["bloque_manual"] = recommended_block(opts.get("chat_manual") or "claude", opts.get("modelo_manual", ""),
@@ -354,7 +380,7 @@ class Api:
         if "bloque_manual" in values:
             size = int(values["bloque_manual"])
             if not 1000 <= size <= 60000:
-                raise ValueError("El tamaño de bloque debe estar entre 1.000 y 60.000 caracteres.")
+                raise ValueError(tr("El tamaño de bloque debe estar entre 1.000 y 60.000 caracteres."))
             p.config.setdefault("opciones", {})["bloque_manual"] = size
         p.save_config()
         return self.project_summary()
@@ -413,17 +439,17 @@ class Api:
         p = self._need_project()
         for path in (original, translation):
             if not Path(path.strip().strip('"')).is_file():
-                raise FileNotFoundError(f"No encuentro el archivo «{path}».")
+                raise FileNotFoundError(tr("No encuentro el archivo «{path}».", path=path))
 
         def run(task: TaskRunner):
-            task.log("Leyendo los dos libros…")
+            task.log(tr("Leyendo los dos libros…"))
             stats = p.add_reference(original.strip().strip('"'), translation.strip().strip('"'),
                                     name=name or None,
-                                    progress=lambda f: task.progress(f, "Emparejando párrafos…"))
-            task.log(f"Listo: {stats.pairs} pares, cobertura {stats.coverage:.0%}, calidad {stats.quality}.")
+                                    progress=lambda f: task.progress(f, tr("Emparejando párrafos…")))
+            task.log(tr("Listo: {pairs} pares, cobertura {coverage:.0%}, calidad {quality}.", pairs=stats.pairs, coverage=stats.coverage, quality=stats.quality))
             return asdict(stats)
 
-        self._tasks.start("Emparejar referencia", run)
+        self._tasks.start(N_("Emparejar referencia"), run, "emparejar")
         return self.task_status()
 
     # -- perfiles de autor ---------------------------------------------------------
@@ -470,8 +496,8 @@ class Api:
     def _provider(self):
         cfg = self._need_project().config["proveedor"]
         if cfg.get("tipo") == "manual":
-            raise ValueError("Estás en modo manual: en la revisión del capítulo usa «Copiar bloque» y "
-                             "«Pegar respuesta», o elige una IA con clave en «Inteligencia artificial».")
+            raise ValueError(tr("Estás en modo manual: en la revisión del capítulo usa «Copiar bloque» y "
+                             "«Pegar respuesta», o elige una IA con clave en «Inteligencia artificial»."))
         return self._provider_factory(cfg)
 
     def list_models(self) -> list[str]:
@@ -528,9 +554,9 @@ class Api:
         provider = self._provider()
         valid = [s for s in ("estilo", "glosario", "analisis", "terminos") if s in steps]
         if not valid:
-            raise ValueError("Elige al menos un paso.")
+            raise ValueError(tr("Elige al menos un paso."))
         if any(s in valid for s in ("estilo", "glosario")) and not p.references():
-            raise ValueError("Para la guía de estilo y el glosario oficial primero añade un libro de referencia.")
+            raise ValueError(tr("Para la guía de estilo y el glosario oficial primero añade un libro de referencia."))
 
         def run(task: TaskRunner):
             for i, step in enumerate(valid):
@@ -540,7 +566,7 @@ class Api:
                 knowledge.prepare(p, provider, steps=(step,), log=task.log)
             return {"pasos": valid}
 
-        self._tasks.start("Preparar conocimiento", run)
+        self._tasks.start(N_("Preparar conocimiento"), run, "conocimiento")
         return self.task_status()
 
     # -- capítulos y revisión --------------------------------------------------
@@ -588,7 +614,7 @@ class Api:
 
     def _check_not_busy(self, index: int) -> None:
         if self._tasks.state["activa"] and self._tasks.state.get("capitulo") == index:
-            raise ValueError("Este capítulo se está traduciendo ahora mismo. Espera a que termine para editarlo.")
+            raise ValueError(tr("Este capítulo se está traduciendo ahora mismo. Espera a que termine para editarlo."))
 
     def save_segment(self, index: int, n: int, text: str) -> dict:
         self._check_not_busy(index)
@@ -622,7 +648,7 @@ class Api:
         translator._translate_chunk(data, [seg])
         if not seg.get("tgt"):
             seg["tgt"] = previous
-            raise ProviderError("La IA no devolvió la traducción de este párrafo. Prueba otra vez.")
+            raise ProviderError(tr("La IA no devolvió la traducción de este párrafo. Prueba otra vez."))
         p.save_chapter(data)
         return {"tgt": seg["tgt"], "avisos": seg.get("avisos", []), "nota": seg.get("nota")}
 
@@ -661,7 +687,7 @@ class Api:
                 nxt = translator.next_chapter()
                 targets = [nxt] if nxt is not None else []
             if not targets:
-                task.log("No quedan capítulos pendientes.")
+                task.log(tr("No quedan capítulos pendientes."))
                 return {"capitulos": []}
             reports = []
             for k, idx in enumerate(targets):
@@ -673,17 +699,17 @@ class Api:
 
                 def prog(done, total, k=k, title=title):
                     task.progress((k + done / max(1, total)) / len(targets),
-                                  f"«{title}»: {done} de {total} párrafos")
+                                  tr("«{title}»: {done} de {total} párrafos", title=title, done=done, total=total))
 
                 report = translator.translate_chapter(idx, progress=prog, should_stop=task.cancelled)
                 reports.append(asdict(report))
                 if report.missing:
-                    task.log(f"«{title}»: quedaron {len(report.missing)} párrafos sin traducir; reintenta o tradúcelos a mano.")
+                    task.log(tr("«{title}»: quedaron {n} párrafos sin traducir; reintenta o tradúcelos a mano.", title=title, n=len(report.missing)))
                 else:
-                    task.log(f"«{title}» traducido. Revísalo y apruébalo.")
+                    task.log(tr("«{title}» traducido. Revísalo y apruébalo.", title=title))
             return {"capitulos": reports}
 
-        self._tasks.start("Traducción", run)
+        self._tasks.start(N_("Traducción"), run, "traducir")
         return self.task_status()
 
     def _manual_state(self, translator: Translator, index: int) -> dict:
@@ -760,8 +786,8 @@ class Api:
         translator = Translator(self._need_project(), None)
         saved, missing = translator.manual_import(index, text)
         if saved == 0:
-            raise ValueError("No encontré párrafos traducidos en lo que pegaste. Copia la respuesta completa "
-                             "(con el botón «Copiar» del bloque de código del chat).")
+            raise ValueError(tr("No encontré párrafos traducidos en lo que pegaste. Copia la respuesta completa "
+                             "(con el botón «Copiar» del bloque de código del chat)."))
         return dict({"guardados": saved, "faltan": missing}, **self._manual_state(translator, index))
 
     # -- preparación en modo manual (copiar y pegar en cualquier chat) ----------
@@ -774,7 +800,7 @@ class Api:
 
     def manual_prep_start(self, step: str) -> dict:
         if self._tasks.state["activa"]:
-            raise ValueError("Espera a que termine la tarea en curso.")
+            raise ValueError(tr("Espera a que termine la tarea en curso."))
         return self._manual_prep().start(step)
 
     def manual_prep_prompt(self) -> dict:
@@ -796,19 +822,19 @@ class Api:
         """Revisa con la IA conectada los párrafos traducidos aún sin revisar (en segundo plano)."""
         p = self._need_project()
         provider = self._provider()
-        title = p.load_chapter(index).get("titulo") or f"Documento {index}"
+        title = p.load_chapter(index).get("titulo") or tr("Documento {index}", index=index)
 
         def run(task: TaskRunner):
             task.state["capitulo"] = index
-            task.log(f"Revisando «{title}» con {provider.model}…")
+            task.log(tr("Revisando «{title}» con {model}…", title=title, model=provider.model))
             reviewer = Reviewer(p, provider, log=task.log)
             result = reviewer.review_chapter(
                 index, should_stop=task.cancelled,
-                progress=lambda k, total: task.progress(k / total if total else 1, f"Bloque {min(k + 1, total)} de {total}"))
-            task.log(f"Listo: {result['sugerencias']} sugerencia(s) en {result['bloques']} bloque(s).")
+                progress=lambda k, total: task.progress(k / total if total else 1, tr("Bloque {k} de {total}", k=min(k + 1, total), total=total)))
+            task.log(tr("Listo: {sugerencias} sugerencia(s) en {bloques} bloque(s).", sugerencias=result['sugerencias'], bloques=result['bloques']))
             return result
 
-        self._tasks.start("Revisión con IA", run)
+        self._tasks.start(N_("Revisión con IA"), run, "revisar")
         return self.task_status()
 
     def review_manual_prompt(self, index: int) -> dict | None:
@@ -862,22 +888,22 @@ class Api:
                      only: list | None = None) -> dict:
         """Reemplaza en la traducción (en todos los párrafos o solo en ``only``)."""
         if self._tasks.state["activa"]:
-            raise ValueError("Espera a que termine la tarea en curso para reemplazar.")
+            raise ValueError(tr("Espera a que termine la tarea en curso para reemplazar."))
         return finder.replace(self._need_project(), query, replacement, only=only,
                               **self._search_options(options))
 
     def undo_replace(self) -> dict:
         if self._tasks.state["activa"]:
-            raise ValueError("Espera a que termine la tarea en curso.")
+            raise ValueError(tr("Espera a que termine la tarea en curso."))
         return finder.undo_replacement(self._need_project())
 
     # -- Word y PDF ------------------------------------------------------------------
 
     DOC_FORMATS = {
-        "docx": ("Exportar a Word", "docx", ""),
-        "docx-bilingue": ("Exportar a Word bilingüe", "docx", "bilingue"),
-        "pdf-a5": ("Exportar a PDF", "pdf", "a5"),
-        "pdf-a4": ("Exportar a PDF", "pdf", "a4"),
+        "docx": (N_("Exportar a Word"), "docx", ""),
+        "docx-bilingue": (N_("Exportar a Word bilingüe"), "docx", "bilingue"),
+        "pdf-a5": (N_("Exportar a PDF"), "pdf", "a5"),
+        "pdf-a4": (N_("Exportar a PDF"), "pdf", "a4"),
     }
 
     def export_document(self, kind: str) -> dict:
@@ -885,7 +911,7 @@ class Api:
         from .. import export_docs
 
         if kind not in self.DOC_FORMATS:
-            raise ValueError("Formato desconocido.")
+            raise ValueError(tr("Formato desconocido."))
         p = self._need_project()
         name, ext, variant = self.DOC_FORMATS[kind]
         stem = slugify(p.config.get("nombre") or "libro")
@@ -893,15 +919,15 @@ class Api:
         out = p.root / "salida" / f"{stem}.{suffix}{'.' + variant if variant in ('a5', 'a4') else ''}.{ext}"
 
         def run(task: TaskRunner):
-            task.log(f"Creando {out.name}…")
+            task.log(tr("Creando {name}…", name=out.name))
             if ext == "docx":
                 export_docs.export_docx(p, out, bilingual=variant == "bilingue", progress=task.progress)
             else:
                 export_docs.export_pdf(p, out, page=variant, progress=task.progress)
-            task.log("Listo.")
+            task.log(tr("Listo."))
             return {"ruta": str(out), "formato": kind}
 
-        self._tasks.start(name, run)
+        self._tasks.start(name, run, "documento")
         return self.task_status()
 
     # -- metadatos de la edición traducida ------------------------------------------
@@ -929,9 +955,9 @@ class Api:
         current = p.cover_settings()
         style = values.get("estilo", current["estilo"])
         if style not in ("difuminada", "lisa", "propia"):
-            raise ValueError("Estilo de portada desconocido.")
+            raise ValueError(tr("Estilo de portada desconocido."))
         if style == "propia" and not p.own_cover_path.exists():
-            raise ValueError("Primero sube tu imagen de portada.")
+            raise ValueError(tr("Primero sube tu imagen de portada."))
         p.config["portada"] = {"usar": bool(values.get("usar", current["usar"])), "estilo": style,
                                "titulo": str(values.get("titulo", current["titulo"])).strip(),
                                "autor": str(values.get("autor", current["autor"])).strip()}
@@ -946,13 +972,13 @@ class Api:
         p = self._need_project()
         head, _, body = (data_url or "").partition(",")
         if not head.startswith("data:image/") or ";base64" not in head:
-            raise ValueError("Elige una imagen JPG, PNG o WEBP.")
+            raise ValueError(tr("Elige una imagen JPG, PNG o WEBP."))
         if len(body) > 20_000_000:
-            raise ValueError("La imagen es demasiado grande (máximo unos 15 MB).")
+            raise ValueError(tr("La imagen es demasiado grande (máximo unos 15 MB)."))
         try:
             data = base64.b64decode(body, validate=True)
         except (binascii.Error, ValueError) as e:
-            raise ValueError("No se pudo leer la imagen.") from e
+            raise ValueError(tr("No se pudo leer la imagen.")) from e
         p.set_own_cover(data)
         return self.cover_settings()
 
@@ -1063,11 +1089,13 @@ class Bridge:
 
     def call(self, name: str, args: list | None = None):
         if name.startswith("_") or not hasattr(Api, name):
-            return {"ok": False, "error": f"Función desconocida: {name}"}
+            return {"ok": False, "error": tr("Función desconocida: {name}", name=name)}
         try:
             return {"ok": True, "resultado": getattr(self._api, name)(*(args or []))}
-        except (ProviderError, EpubError, PdfError, ValueError, KeyError, FileNotFoundError, FileExistsError) as e:
+        except KeyError as e:  # str(KeyError) añade comillas
+            return {"ok": False, "error": str(e.args[0]) if e.args else str(e)}
+        except (ProviderError, EpubError, PdfError, ValueError, FileNotFoundError, FileExistsError) as e:
             return {"ok": False, "error": str(e)}
         except Exception as e:  # pragma: no cover
             _log_error(traceback.format_exc())
-            return {"ok": False, "error": f"Error inesperado: {e}"}
+            return {"ok": False, "error": tr("Error inesperado: {error}", error=e)}

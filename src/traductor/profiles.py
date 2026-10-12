@@ -15,6 +15,7 @@ from pathlib import Path
 from .inline import strip_marks
 from .project import Project, read_json, slugify, write_json
 from .providers import config_dir
+from .i18n import tr
 
 
 def profiles_dir() -> Path:
@@ -26,7 +27,7 @@ def profiles_dir() -> Path:
 def _folder(profile_id: str) -> Path:
     folder = profiles_dir() / slugify(profile_id)
     if not (folder / "perfil.json").exists():
-        raise ValueError("No encuentro ese perfil de autor.")
+        raise ValueError(tr("No encuentro ese perfil de autor."))
     return folder
 
 
@@ -61,7 +62,7 @@ def _merge_glossary(base: list[dict], extra: list[dict]) -> list[dict]:
 def save_profile(project: Project, name: str = "") -> dict:
     """Crea o actualiza el perfil del autor con lo de este proyecto."""
     cfg = project.config
-    name = (name or "").strip() or (cfg.get("autor") or "").strip() or "Autor sin nombre"
+    name = (name or "").strip() or (cfg.get("autor") or "").strip() or tr("Autor sin nombre")
     folder = profiles_dir() / slugify(name)
     refs = folder / "referencias"
     refs.mkdir(parents=True, exist_ok=True)
@@ -78,7 +79,7 @@ def save_profile(project: Project, name: str = "") -> dict:
         dest = refs / slugify(f"{title}-aprobado")
         dest.mkdir(parents=True, exist_ok=True)
         write_json(dest / "info.json", {
-            "nombre": f"{title} (traducción aprobada)", "titulo_original": title,
+            "nombre": tr("{title} (traducción aprobada)", title=title), "titulo_original": title,
             "titulo_traduccion": cfg.get("titulo_traducido") or title, "autor": cfg.get("autor", ""),
             "idioma_traduccion": project.target_lang, "origen": "perfil",
             "estadisticas": {"pairs": len(approved), "src_paragraphs": len(approved),

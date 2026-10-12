@@ -17,14 +17,15 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from .i18n import N_, tr
 
 DPI = 300
 BODY_PT = 11.0
 TESSERACT_LANGS = {"en": "eng", "es": "spa", "pt": "por", "fr": "fra", "it": "ita", "de": "deu", "ca": "cat",
                    "gl": "glg", "eu": "eus", "nl": "nld", "ru": "rus", "ja": "jpn", "zh": "chi_sim", "ko": "kor"}
-NO_ENGINE = ("Este PDF está escaneado (sus páginas son imágenes). Para reconocer el texto hace falta un OCR: "
+NO_ENGINE = (N_("Este PDF está escaneado (sus páginas son imágenes). Para reconocer el texto hace falta un OCR: "
              "en Windows 10 y 11, Jerónimo usa el de Windows con el idioma del libro instalado (Configuración → "
-             "Hora e idioma → Idioma y región → Agregar un idioma). También puedes instalar Tesseract, gratuito.")
+             "Hora e idioma → Idioma y región → Agregar un idioma). También puedes instalar Tesseract, gratuito."))
 
 
 @dataclass
@@ -93,7 +94,7 @@ class TesseractEngine:
         wanted = [TESSERACT_LANGS[lang]] if lang in TESSERACT_LANGS else ["eng", "spa"]
         chosen = [code for code in wanted if code in have] or [c for c in ("eng",) if c in have]
         if not chosen:
-            raise ValueError("Tesseract no tiene instalado ningún idioma utilizable.")
+            raise ValueError(tr("Tesseract no tiene instalado ningún idioma utilizable."))
         return "+".join(chosen)
 
     def recognize(self, image, lang: str) -> list[OcrLine]:
@@ -130,7 +131,7 @@ def parse_tsv(tsv: str) -> list[OcrLine]:
 
 
 class WindowsEngine:
-    name = "OCR de Windows"
+    name = N_("OCR de Windows")
 
     @staticmethod
     def available() -> bool:
@@ -163,7 +164,7 @@ class WindowsEngine:
                     return engine
         engine = OcrEngine.try_create_from_user_profile_languages()
         if engine is None:
-            raise RuntimeError("Windows no tiene idiomas de OCR instalados.")
+            raise RuntimeError(tr("Windows no tiene idiomas de OCR instalados."))
         return engine
 
     def recognize(self, image, lang: str) -> list[OcrLine]:
@@ -218,7 +219,7 @@ def pick_engine(lang: str = ""):
         return tesseract
     from .pdf2epub import PdfError
 
-    raise PdfError(NO_ENGINE)
+    raise PdfError(tr(NO_ENGINE))
 
 
 # -- de las páginas reconocidas al modelo del conversor de PDF ------------------------------
@@ -263,9 +264,9 @@ def ocr_pdf(path: Path, lang: str = "", *, progress=None, should_stop=None, engi
     try:
         for i in range(total):
             if should_stop and should_stop():
-                raise PdfError("Conversión detenida.")
+                raise PdfError(tr("Conversión detenida."))
             if progress:
-                progress(0.05 + 0.65 * i / max(1, total), f"Reconociendo el texto (OCR): página {i + 1} de {total}…")
+                progress(0.05 + 0.65 * i / max(1, total), tr("Reconociendo el texto (OCR): página {i} de {total}…", i=i + 1, total=total))
             page = pdf[i]
             width, height = page.get_size()
             image = page.render(scale=scale, grayscale=True).to_pil()
@@ -274,8 +275,8 @@ def ocr_pdf(path: Path, lang: str = "", *, progress=None, should_stop=None, engi
             except PdfError:
                 raise
             except Exception as e:
-                raise PdfError(f"El OCR falló en la página {i + 1}: {e}") from e
+                raise PdfError(tr("El OCR falló en la página {i}: {error}", i=i + 1, error=e)) from e
             scans.append((i + 1, float(width), float(height), scale, lines))
     finally:
         pdf.close()
-    return to_pages(scans), engine.name
+    return to_pages(scans), tr(engine.name)

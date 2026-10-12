@@ -19,6 +19,7 @@ from . import prompts
 from .inline import strip_marks
 from .project import Project
 from .providers import Provider
+from .i18n import N_, notes_language, tr
 
 _SENT_SPLIT = re.compile(r"(?<=[.!?…:;\"”’)])\s+")
 _TOKEN_RE = re.compile(r"[A-Za-zÀ-ÿ][\w'’\-]*")
@@ -100,10 +101,10 @@ PROFILES = {
 }
 
 STEP_NAMES = {
-    "estilo": "Guía de estilo",
-    "glosario": "Glosario oficial",
-    "analisis": "Análisis del libro",
-    "terminos": "Proponer términos",
+    "estilo": N_("Guía de estilo"),
+    "glosario": N_("Glosario oficial"),
+    "analisis": N_("Análisis del libro"),
+    "terminos": N_("Proponer términos"),
 }
 
 
@@ -133,7 +134,7 @@ def _profile(provider: Provider | None) -> dict:
 def _need_refs(project: Project) -> list:
     pairs = project.reference_pairs(max_cost=6.0)
     if not pairs:
-        raise ValueError("Primero añade al menos un libro de referencia (original + traducción oficial).")
+        raise ValueError(tr("Primero añade al menos un libro de referencia (original + traducción oficial)."))
     return pairs
 
 
@@ -142,8 +143,8 @@ def plan_style(project: Project, profile: dict) -> list[Job]:
     user = prompts.STYLE_GUIDE_USER.format(
         author=project.config.get("autor") or "this author",
         src=prompts.lang_name(project.source_lang), tgt=prompts.lang_name(project.target_lang),
-        passages=prompts.passages_block(sample))
-    return [Job("estilo", f"Guía de estilo ({len(sample)} pasajes de las traducciones oficiales)",
+        passages=prompts.passages_block(sample), notes_lang=notes_language())
+    return [Job("estilo", tr("Guía de estilo ({n} pasajes de las traducciones oficiales)", n=len(sample)),
                 prompts.ANALYST_SYSTEM, user, 16000)]
 
 
@@ -163,8 +164,8 @@ def plan_glossary(project: Project, profile: dict) -> list[Job]:
         user = prompts.GLOSSARY_USER.format(
             author=project.config.get("autor") or "this author",
             src=prompts.lang_name(project.source_lang), tgt=prompts.lang_name(project.target_lang),
-            terms="\n".join(blocks))
-        jobs.append(Job("glosario", f"Glosario oficial: términos {start + 1}–{start + len(batch)} de {len(terms)}",
+            terms="\n".join(blocks), notes_lang=notes_language())
+        jobs.append(Job("glosario", tr("Glosario oficial: términos {start}–{start2} de {n}", start=start + 1, start2=start + len(batch), n=len(terms)),
                         prompts.ANALYST_SYSTEM, user, 8000))
     return jobs
 
@@ -206,16 +207,18 @@ def plan_analysis(project: Project, profile: dict) -> list[Job]:
     parts = _book_parts(project, profile["analysis"])
     title = project.config.get("titulo") or project.config.get("nombre", "")
     author = project.config.get("autor") or ""
-    return [Job("analisis", f"Análisis del libro: parte {k} de {len(parts)}", prompts.ANALYST_SYSTEM,
+    return [Job("analisis", tr("Análisis del libro: parte {k} de {n}", k=k, n=len(parts)), prompts.ANALYST_SYSTEM,
                 prompts.ANALYZE_USER.format(part=k, parts=len(parts), title=title,
-                                            author_part=f" by {author}" if author else "", text=text), 16000)
+                                            author_part=f" by {author}" if author else "", text=text,
+                                            notes_lang=notes_language()), 16000)
             for k, text in enumerate(parts, 1)]
 
 
 def merge_job(project: Project, summaries: list[str]) -> Job:
     title = project.config.get("titulo") or project.config.get("nombre", "")
-    return Job("analisis", "Análisis del libro: sinopsis final", prompts.ANALYST_SYSTEM,
-               prompts.SYNOPSIS_MERGE_USER.format(title=title, summaries="\n\n".join(summaries)), 4000,
+    return Job("analisis", tr("Análisis del libro: sinopsis final"), prompts.ANALYST_SYSTEM,
+               prompts.SYNOPSIS_MERGE_USER.format(title=title, summaries="\n\n".join(summaries),
+                                                  notes_lang=notes_language()), 4000,
                {"fusion": True})
 
 
@@ -235,8 +238,8 @@ def plan_terms(project: Project, profile: dict) -> list[Job]:
             title=project.config.get("titulo") or project.config.get("nombre", ""),
             src=prompts.lang_name(project.source_lang), tgt=prompts.lang_name(project.target_lang),
             style_guide=project.style_guide() or "(no style guide)",
-            official=official or "(empty)", terms=listing)
-        jobs.append(Job("terminos", f"Proponer términos: {start + 1}–{start + len(batch)} de {len(pending)}",
+            official=official or "(empty)", terms=listing, notes_lang=notes_language())
+        jobs.append(Job("terminos", tr("Proponer términos: {start}–{start2} de {n}", start=start + 1, start2=start + len(batch), n=len(pending)),
                         prompts.ANALYST_SYSTEM, user, 8000, {"tipos": {t["term"]: t.get("type", "") for t in batch}}))
     return jobs
 
@@ -294,7 +297,7 @@ def apply_response(project: Project, job: Job, text: str, acc: dict) -> int:
             if name and name not in terms:
                 terms[name] = {"term": name, "type": t.get("type", ""), "note": t.get("note", "")}
         return 1
-    raise ValueError(f"Paso desconocido: {job.step}")
+    raise ValueError(tr("Paso desconocido: {step}", step=job.step))
 
 
 def finish_analysis(project: Project, acc: dict) -> dict:
@@ -321,7 +324,7 @@ def run_step(project: Project, provider: Provider, step: str, *, log=None) -> No
         result = provider.complete(job.system, job.user, max_tokens=job.max_tokens)
         project.record_usage(result.model or provider.model, result.usage)
         if not apply_response(project, job, result.text, acc) and step == "estilo":
-            raise ValueError("La IA no devolvió la guía de estilo. Prueba de nuevo.")
+            raise ValueError(tr("La IA no devolvió la guía de estilo. Prueba de nuevo."))
     if step == "analisis":
         if len(acc.get("resumenes", [])) > 1:
             job = merge_job(project, acc["resumenes"])
@@ -386,13 +389,13 @@ class ManualPrep:
 
     def start(self, step: str, *, analysis_budget: int | None = None) -> dict:
         if step not in PLANNERS:
-            raise ValueError(f"Paso desconocido: {step}")
+            raise ValueError(tr("Paso desconocido: {step}", step=step))
         profile = dict(PROFILES["chat"])
         if analysis_budget:
             profile["analysis"] = analysis_budget
         jobs = PLANNERS[step](self.project, profile)
         if not jobs:
-            raise ValueError("No hay nada que preparar en este paso (por ejemplo, no quedan términos sin decidir).")
+            raise ValueError(tr("No hay nada que preparar en este paso (por ejemplo, no quedan términos sin decidir)."))
         state = {"paso": step, "trabajos": [j.to_dict() for j in jobs], "hechos": 0, "acumulado": {}}
         self._save(state)
         return self.status()
@@ -403,13 +406,13 @@ class ManualPrep:
             return None
         total = len(st["trabajos"])
         current = st["trabajos"][st["hechos"]] if st["hechos"] < total else None
-        return {"paso": st["paso"], "nombre": STEP_NAMES.get(st["paso"], st["paso"]), "hechos": st["hechos"],
+        return {"paso": st["paso"], "nombre": tr(STEP_NAMES.get(st["paso"], st["paso"])), "hechos": st["hechos"],
                 "total": total, "etiqueta": current["label"] if current else "", "terminado": current is None}
 
     def prompt(self) -> dict:
         st = self.state()
         if not st or st["hechos"] >= len(st["trabajos"]):
-            raise ValueError("No hay ningún paso de preparación manual en curso.")
+            raise ValueError(tr("No hay ningún paso de preparación manual en curso."))
         job = Job(**st["trabajos"][st["hechos"]])
         return {"texto": job.chat_text(), "etiqueta": job.label, "parte": st["hechos"] + 1,
                 "total": len(st["trabajos"]), "caracteres": len(job.chat_text())}
@@ -417,13 +420,13 @@ class ManualPrep:
     def import_response(self, text: str) -> dict:
         st = self.state()
         if not st or st["hechos"] >= len(st["trabajos"]):
-            raise ValueError("No hay ningún paso de preparación manual en curso.")
+            raise ValueError(tr("No hay ningún paso de preparación manual en curso."))
         job = Job(**st["trabajos"][st["hechos"]])
         acc = st["acumulado"]
         found = apply_response(self.project, job, text, acc)
         if not found:
-            raise ValueError("No encontré lo que esperaba en la respuesta. Copia la respuesta completa del chat "
-                             "(el bloque de código entero) y vuelve a intentarlo.")
+            raise ValueError(tr("No encontré lo que esperaba en la respuesta. Copia la respuesta completa del chat "
+                             "(el bloque de código entero) y vuelve a intentarlo."))
         st["hechos"] += 1
         if st["paso"] == "analisis" and st["hechos"] == len(st["trabajos"]):
             if len(acc.get("resumenes", [])) > 1 and "sinopsis" not in acc:

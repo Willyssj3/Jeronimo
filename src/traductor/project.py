@@ -29,6 +29,7 @@ from pathlib import Path
 from . import align as aligner
 from .epub import EpubBook
 from .retrieval import Example, ExampleIndex
+from .i18n import tr
 
 PROJECT_FILE = "proyecto.json"
 VERSION = 1
@@ -102,7 +103,7 @@ class Project:
         self.root = Path(root)
         cfg = read_json(self.root / PROJECT_FILE)
         if cfg is None:
-            raise FileNotFoundError(f"No hay un proyecto en «{self.root}».")
+            raise FileNotFoundError(tr("No hay un proyecto en «{root}».", root=self.root))
         merged = json.loads(json.dumps(DEFAULT_CONFIG))
         merged.update(cfg)
         self.config = merged
@@ -116,7 +117,7 @@ class Project:
                variant: str = "auto", name: str | None = None) -> "Project":
         root = Path(root)
         if (root / PROJECT_FILE).exists():
-            raise FileExistsError(f"Ya existe un proyecto en «{root}».")
+            raise FileExistsError(tr("Ya existe un proyecto en «{root}».", root=root))
         (root / "libro").mkdir(parents=True, exist_ok=True)
         dest = root / "libro" / "original.epub"
         shutil.copyfile(book_path, dest)
@@ -190,7 +191,7 @@ class Project:
     def load_chapter(self, index: int) -> dict:
         data = read_json(self.chapter_path(index))
         if data is None:
-            raise KeyError(f"No existe el capítulo {index}.")
+            raise KeyError(tr("No existe el capítulo {index}.", index=index))
         return data
 
     def save_chapter(self, data: dict) -> None:
@@ -221,7 +222,7 @@ class Project:
     def set_approved(self, index: int, approved: bool = True) -> None:
         data = self.load_chapter(index)
         if approved and any(not s.get("tgt") for s in data["segmentos"]):
-            raise ValueError("No se puede aprobar un capítulo con párrafos sin traducir.")
+            raise ValueError(tr("No se puede aprobar un capítulo con párrafos sin traducir."))
         data["aprobado"] = approved
         self.save_chapter(data)
 
@@ -267,7 +268,7 @@ class Project:
         """Recupera la traducción borrada en los párrafos que siguen vacíos."""
         backup = read_json(self._deleted_path(index))
         if not backup:
-            raise ValueError("No hay ninguna traducción borrada de este capítulo.")
+            raise ValueError(tr("No hay ninguna traducción borrada de este capítulo."))
         data = self.load_chapter(index)
         saved = {s["n"]: s for s in backup.get("segmentos", [])}
         restored = 0
@@ -410,14 +411,14 @@ class Project:
         if "descripcion" in values:  # la descripción conserva sus saltos de párrafo
             clean["descripcion"] = "\n".join(" ".join(line.split()) for line in str(values["descripcion"] or "").splitlines()).strip()
         if clean.get("fecha") and not re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", clean["fecha"]):
-            raise ValueError("La fecha debe ser un año (2026) o una fecha completa (2026-10-12).")
+            raise ValueError(tr("La fecha debe ser un año (2026) o una fecha completa (2026-10-12)."))
         if clean.get("isbn"):
             isbn = re.sub(r"[-\s]", "", clean["isbn"]).upper()
             if not re.fullmatch(r"\d{13}|\d{9}[\dX]", isbn):
-                raise ValueError("El ISBN debe tener 10 o 13 dígitos.")
+                raise ValueError(tr("El ISBN debe tener 10 o 13 dígitos."))
             clean["isbn"] = isbn
         if clean.get("serie_numero") and not re.fullmatch(r"\d+([.,]\d+)?", clean["serie_numero"]):
-            raise ValueError("El número en la serie debe ser un número.")
+            raise ValueError(tr("El número en la serie debe ser un número."))
         saved = {k: v for k, v in {**(self.config.get("metadatos") or {}), **clean}.items() if v}
         self.config["metadatos"] = saved
         if "titulo" in clean:
@@ -458,9 +459,9 @@ class Project:
                 im.load()
                 img = im.convert("RGB")
         except Exception as e:
-            raise ValueError("No se pudo leer la imagen: usa un archivo JPG, PNG o WEBP.") from e
+            raise ValueError(tr("No se pudo leer la imagen: usa un archivo JPG, PNG o WEBP.")) from e
         if min(img.size) < 300:
-            raise ValueError("La imagen es muy pequeña: usa una de al menos 300 píxeles de ancho.")
+            raise ValueError(tr("La imagen es muy pequeña: usa una de al menos 300 píxeles de ancho."))
         if img.height > 3200:
             img = img.resize((round(img.width * 3200 / img.height), 3200), Image.LANCZOS)
         self.own_cover_path.parent.mkdir(parents=True, exist_ok=True)

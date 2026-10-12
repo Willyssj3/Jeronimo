@@ -17,6 +17,7 @@ from lxml import etree
 
 from . import inline
 from .inline import localname
+from .i18n import tr
 
 NS = {
     "c": "urn:oasis:names:tc:opendocument:xmlns:container",
@@ -277,7 +278,7 @@ class EpubBook:
         try:
             self._zip = zipfile.ZipFile(self.path)
         except (zipfile.BadZipFile, FileNotFoundError) as e:
-            raise EpubError(f"No se pudo abrir el EPUB «{self.path.name}»: {e}") from e
+            raise EpubError(tr("No se pudo abrir el EPUB «{name}»: {error}", name=self.path.name, error=e)) from e
         self._names = set(self._zip.namelist())
         try:
             container = etree.fromstring(self._zip.read("META-INF/container.xml"))
@@ -285,7 +286,7 @@ class EpubBook:
             self.opf_path = rootfile.get("full-path")
             self.opf = parse_xml(self._zip.read(self.opf_path))
         except (KeyError, AttributeError, etree.XMLSyntaxError) as e:
-            raise EpubError(f"«{self.path.name}» no parece un EPUB válido.") from e
+            raise EpubError(tr("«{name}» no parece un EPUB válido.", name=self.path.name)) from e
         self.opf_dir = posixpath.dirname(self.opf_path)
         self._load_manifest()
         self._check_drm()
@@ -335,7 +336,7 @@ class EpubBook:
             docs.append(Document(index=len(docs), path=ncx["path"], media_type=NCX_TYPE,
                                  kind="ncx", in_spine=False, linear=False))
         if not any(d.in_spine for d in docs):
-            raise EpubError(f"«{self.path.name}» no tiene capítulos legibles.")
+            raise EpubError(tr("«{name}» no tiene capítulos legibles.", name=self.path.name))
         self.documents = docs
 
     def _check_drm(self) -> None:
@@ -351,8 +352,8 @@ class EpubBook:
         }
         if any(d.path in encrypted for d in self.documents):
             raise EpubError(
-                f"«{self.path.name}» está protegido con DRM. La app solo puede abrir "
-                "EPUB sin DRM (por ejemplo, los que compraste en tiendas sin DRM o los tuyos propios)."
+                tr("«{name}» está protegido con DRM. La app solo puede abrir EPUB sin DRM (por ejemplo, los "
+                   "que compraste en tiendas sin DRM o los tuyos propios).", name=self.path.name)
             )
 
     # -- metadatos ----------------------------------------------------------
@@ -466,9 +467,9 @@ class EpubBook:
                   toc: dict[str, str] | None = None) -> str:
         """Título legible de un documento: su entrada del índice o su primer encabezado."""
         if doc.kind == "ncx":
-            return "Índice (NCX)"
+            return tr("Índice (NCX)")
         if not doc.in_spine:
-            return "Índice"
+            return tr("Índice")
         label = (toc if toc is not None else self.toc_labels()).get(doc.path)
         if label:
             return label[:80]

@@ -12,6 +12,7 @@ from datetime import datetime
 
 from .inline import TOKEN_RE, strip_marks
 from .project import read_json, write_json
+from .i18n import tr
 
 MAX_RESULTS = 500
 CONTEXT = 70
@@ -20,7 +21,7 @@ CONTEXT = 70
 def pattern(query: str, *, case: bool = False, whole_word: bool = False) -> re.Pattern:
     query = (query or "").strip()
     if not query:
-        raise ValueError("Escribe qué quieres buscar.")
+        raise ValueError(tr("Escribe qué quieres buscar."))
     body = re.escape(query)
     if whole_word:
         body = r"(?<!\w)" + body + r"(?!\w)"
@@ -92,7 +93,7 @@ def search(project, query: str, *, case: bool = False, whole_word: bool = False,
             if len(results) >= MAX_RESULTS:
                 truncated = True
                 continue
-            row = {"doc": index, "titulo": data.get("titulo") or f"Documento {index}", "n": seg["n"],
+            row = {"doc": index, "titulo": data.get("titulo") or tr("Documento {index}", index=index), "n": seg["n"],
                    "coincidencias": len(found), "fragmento": _snippet(text, found[0].start(), found[0].end())}
             if field == "src":
                 other = strip_marks(seg.get("tgt") or "")
@@ -117,7 +118,7 @@ def replace(project, query: str, replacement: str, *, case: bool = False, whole_
         if allowed is not None and not any(d == index for d, _n in allowed):
             continue
         if index in busy:
-            raise ValueError("Hay un capítulo traduciéndose ahora mismo. Espera a que termine para reemplazar.")
+            raise ValueError(tr("Hay un capítulo traduciéndose ahora mismo. Espera a que termine para reemplazar."))
         data = project.load_chapter(index)
         touched = False
         for seg in data["segmentos"]:
@@ -150,7 +151,7 @@ def undo_replacement(project) -> dict:
     """Deshace el último reemplazo en los párrafos que no se tocaron después."""
     data = read_json(_undo_path(project))
     if not data or not data.get("cambios"):
-        raise ValueError("No hay ningún reemplazo que deshacer.")
+        raise ValueError(tr("No hay ningún reemplazo que deshacer."))
     restored = skipped = 0
     by_doc: dict[int, list[dict]] = {}
     for change in data["cambios"]:

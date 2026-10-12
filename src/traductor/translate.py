@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from . import inline, prompts
 from .project import Project
 from .providers import Provider, RateLimitError, RefusalError
+from .i18n import N_, tr
 
 
 # Caracteres del original por bloque en el modo manual (copiar y pegar en un chat).
@@ -36,20 +37,20 @@ CHAT_PRESETS = {
     "copilot": ("Microsoft Copilot", 6000),
     "deepseek": ("DeepSeek", 12000),
     "lechat": ("Le Chat (Mistral)", 10000),
-    "otro": ("Otro chat o modelo local", 6000),
+    "otro": (N_("Otro chat o modelo local"), 6000),
 }
 
 # Modelos de cada chat por nivel («avanzado», «estandar», «rapido»). Se nombran
 # por familia (sin versión) para que no queden viejos.
-_GENERIC_MODELS = [("avanzado", "El más capaz (con razonamiento)", "avanzado"),
-                   ("estandar", "Estándar", "estandar"),
-                   ("rapido", "Rápido o ligero (mini, flash…)", "rapido")]
+_GENERIC_MODELS = [("avanzado", N_("El más capaz (con razonamiento)"), "avanzado"),
+                   ("estandar", N_("Estándar"), "estandar"),
+                   ("rapido", N_("Rápido o ligero (mini, flash…)"), "rapido")]
 CHAT_MODELS = {
-    "claude": [("opus", "Opus (el más capaz)", "avanzado"), ("sonnet", "Sonnet (equilibrado)", "estandar"),
-               ("haiku", "Haiku (rápido)", "rapido")],
-    "gemini": [("pro", "Pro (el más capaz)", "avanzado"), ("flash", "Flash (rápido)", "rapido")],
+    "claude": [("opus", N_("Opus (el más capaz)"), "avanzado"), ("sonnet", N_("Sonnet (equilibrado)"), "estandar"),
+               ("haiku", N_("Haiku (rápido)"), "rapido")],
+    "gemini": [("pro", N_("Pro (el más capaz)"), "avanzado"), ("flash", N_("Flash (rápido)"), "rapido")],
 }
-PLANS = {"pago": "De pago (Pro, Plus, Advanced…)", "gratis": "Gratuito"}
+PLANS = {"pago": N_("De pago (Pro, Plus, Advanced…)"), "gratis": N_("Gratuito")}
 # Proporción del bloque recomendado según el nivel del modelo y el plan.
 _TIER_FACTOR = {"avanzado": 1.0, "estandar": 0.85, "rapido": 0.6}
 _PLAN_FACTOR = {"pago": 1.0, "gratis": 0.5}
@@ -235,7 +236,7 @@ class Translator:
                 t, warnings = inline.repair(t, slots)
             src_norm = _norm(seg["src"])
             if src_norm == _norm(t) and len(src_norm.split()) >= 4:
-                warnings.append("posible párrafo sin traducir")
+                warnings.append(N_("posible párrafo sin traducir"))
             seg["tgt"] = t
             seg["avisos"] = warnings
             seg["nota"] = notes.get(seg["n"]) or None
@@ -255,7 +256,7 @@ class Translator:
             except RateLimitError:
                 if attempt == len(delays):
                     raise
-                self.log(f"Límite de peticiones alcanzado; espero {delays[attempt]} s y reintento…")
+                self.log(tr("Límite de peticiones alcanzado; espero {segundos} s y reintento…", segundos=delays[attempt]))
                 time.sleep(delays[attempt])
         raise AssertionError("inalcanzable")
 
@@ -270,36 +271,36 @@ class Translator:
                 self._translate_chunk(data, chunk[half:], depth)
                 return
             seg = chunk[0]
-            seg["avisos"] = ["la IA se negó a traducir este párrafo: tradúcelo a mano"]
+            seg["avisos"] = [N_("la IA se negó a traducir este párrafo: tradúcelo a mano")]
             return
         self.project.record_usage(result.model or self.provider.model, result.usage)
         missing = self.apply_response(chunk, result.text)
         if not missing:
             return
         if result.truncated and len(missing) > 1:
-            self.log("La respuesta se cortó; reparto el bloque en partes más pequeñas…")
+            self.log(tr("La respuesta se cortó; reparto el bloque en partes más pequeñas…"))
             half = len(missing) // 2
             self._translate_chunk(data, missing[:half], depth + 1)
             self._translate_chunk(data, missing[half:], depth + 1)
         elif depth < self.options.max_retries:
-            self.log(f"Faltaron {len(missing)} párrafo(s) en la respuesta; reintento…")
+            self.log(tr("Faltaron {n} párrafo(s) en la respuesta; reintento…", n=len(missing)))
             self._translate_chunk(data, missing, depth + 1)
 
     def translate_chapter(self, index: int, *, progress=None, should_stop=None) -> ChapterReport:
         if self.provider is None:
-            raise ValueError("No hay un proveedor de IA configurado.")
+            raise ValueError(tr("No hay un proveedor de IA configurado."))
         data = self.project.load_chapter(index)
         report = ChapterReport(index)
         total = len(data["segmentos"])
         chunks = self.pending_chunks(data)
         if not chunks:
             return report
-        self.log(f"Capítulo {index} «{data.get('titulo', '')}»: {len(chunks)} bloque(s).")
+        self.log(tr("Capítulo {index} «{titulo}»: {n} bloque(s).", index=index, titulo=data.get("titulo", ""), n=len(chunks)))
         for k, chunk in enumerate(chunks, 1):
             if should_stop and should_stop():
                 report.stopped = True
                 break
-            self.log(f"  Bloque {k}/{len(chunks)} ({len(chunk)} párrafos)…")
+            self.log("  " + tr("Bloque {k}/{n} ({parrafos} párrafos)…", k=k, n=len(chunks), parrafos=len(chunk)))
             self._translate_chunk(data, chunk)
             self.project.save_chapter(data)
             if progress:

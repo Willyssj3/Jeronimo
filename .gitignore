@@ -19,3 +19,4 @@ mis-proyectos/
 # Claves y configuración local
 .env
 *.key
+pruebas-ui/
