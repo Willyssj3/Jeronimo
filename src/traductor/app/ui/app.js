@@ -338,14 +338,14 @@ function setChrome() {
     $("#side-bar").style.width = `${pct(prog.hechos, prog.total)}%`;
   }
   for (const a of document.querySelectorAll("#sidebar a")) {
-    a.classList.toggle("active", a.dataset.view === state.view || (state.view === "revision" && a.dataset.view === "capitulos"));
+    a.classList.toggle("active", a.dataset.view === state.view || (["revision", "lectura"].includes(state.view) && a.dataset.view === "capitulos"));
   }
 }
 
 function go(viewName, chapter = null) {
   state.view = viewName;
   state.chapter = chapter;
-  location.hash = viewName === "revision" ? `revision/${chapter}` : viewName;
+  location.hash = ["revision", "lectura"].includes(viewName) ? `${viewName}/${chapter}` : viewName;
 }
 
 window.addEventListener("hashchange", () => {
@@ -366,13 +366,15 @@ $("#btn-close-project").onclick = async () => {
 };
 
 async function render() {
+  stopSpeech();
   setChrome();
   const v = view();
   v.textContent = "";
   $("#main").scrollTop = 0;
   if (!state.summary) return renderHome(v);
   const views = { resumen: renderSummary, referencias: renderReferences, ia: renderAI, conocimiento: renderKnowledge,
-    capitulos: renderChapters, revision: renderReview, calidad: renderQuality, buscar: renderSearch, exportar: renderExport };
+    capitulos: renderChapters, revision: renderReview, lectura: renderReader, calidad: renderQuality, buscar: renderSearch,
+    exportar: renderExport };
   return (views[state.view] || renderSummary)(v);
 }
 
@@ -886,6 +888,169 @@ function renderChapters(v) {
             } }, c.status === "omitido" ? "Incluir" : "Omitir"))))))));
 }
 
+/* ---------------------------------------------------------------- lectura y voz */
+
+const speech = { active: false, paused: false, queue: [], token: 0 };
+const prefs = (() => { try { return JSON.parse(localStorage.getItem("jeronimo-lectura") || "{}"); } catch (e) { return {}; } })();
+const savePrefs = () => { try { localStorage.setItem("jeronimo-lectura", JSON.stringify(prefs)); } catch (e) { /* sin almacenamiento */ } };
+
+function stopSpeech() {
+  speech.token += 1;
+  speech.active = speech.paused = false;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  document.querySelectorAll(".reader-p.speaking").forEach((p) => p.classList.remove("speaking"));
+}
+
+/* Trozos cortos (por frases): Chromium corta las locuciones muy largas. */
+function speechChunks(text) {
+  const parts = text.match(/[^.!?…]+[.!?…]+[»”"')\]]*\s*|[^.!?…]+$/g) || [text];
+  const chunks = [];
+  for (const p of parts) {
+    if (chunks.length && (chunks[chunks.length - 1] + p).length < 220) chunks[chunks.length - 1] += p;
+    else chunks.push(p);
+  }
+  return chunks.map((c) => c.trim()).filter(Boolean);
+}
+
+async function renderReader(v) {
+  const index = state.chapter;
+  const data = await guard(() => rpc("chapter", index));
+  if (!data) return;
+  const lang = state.summary.idioma_destino;
+  const list = state.summary.capitulos.filter((c) => c.total > 0 && c.status !== "omitido");
+  const pos = list.findIndex((c) => c.index === index);
+  const prev = pos > 0 ? list[pos - 1] : null;
+  const next = pos >= 0 && pos + 1 < list.length ? list[pos + 1] : null;
+  const size = prefs.size || 1.25;
+
+  const page = h("article", { class: "reader-page", lang, style: `font-size:${size}rem` });
+  const paras = [];
+  for (const s of data.segmentos) {
+    const heading = /^h\d$/.test(s.tag);
+    const el = h(heading ? "h2" : "p", { class: (heading ? "reader-h" : "reader-p") + (s.tgt ? "" : " untranslated"),
+      title: s.tgt ? "Haz clic para escuchar desde aquí" : "Sin traducir (se muestra el original)" });
+    markedToDom(el, s.tgt || s.src, s.marcas || {});
+    el.dataset.n = s.n;
+    if (heading) el.classList.add("reader-p");
+    page.appendChild(el);
+    // Lo que se lee en voz alta: sin las llamadas a notas ni otros elementos fijos.
+    const spoken = el.cloneNode(true);
+    spoken.querySelectorAll(".mk.x").forEach((x) => x.remove());
+    paras.push({ el, text: s.tgt ? spoken.textContent.replace(/\s+/g, " ").trim() : "", translated: !!s.tgt });
+  }
+  const done = paras.filter((p) => p.translated).length;
+
+  // Voz.
+  const synth = window.speechSynthesis;
+  const voiceSel = h("select", { style: "width:auto;max-width:280px", onchange: () => { prefs.voice = voiceSel.value; savePrefs(); } });
+  const rateSel = h("select", { style: "width:auto", onchange: () => { prefs.rate = Number(rateSel.value); savePrefs(); } },
+    [[0.8, "Lenta"], [0.9, "Pausada"], [1, "Normal"], [1.15, "Ágil"], [1.3, "Rápida"]].map(([r, label]) =>
+      h("option", { value: r, selected: (prefs.rate || 1) === r }, label)));
+  const voiceNote = h("span", { class: "muted small" });
+  const fillVoices = () => {
+    if (!synth) return;
+    const all = synth.getVoices();
+    const base = lang.split("-")[0].toLowerCase();
+    const mine = all.filter((x) => x.lang.toLowerCase().startsWith(base));
+    voiceSel.textContent = "";
+    mine.forEach((x) => voiceSel.appendChild(h("option", { value: x.name, selected: x.name === prefs.voice },
+      x.name.replace(/^Microsoft /, "").replace(/ Online \(Natural\)/, " (natural)"))));
+    voiceSel.hidden = !mine.length;
+    voiceNote.textContent = mine.length ? "" : (all.length
+      ? `Windows no tiene voces instaladas para «${lang}». Añádelas en Configuración → Hora e idioma → Voz.`
+      : "Cargando voces…");
+  };
+  if (synth) {
+    fillVoices();
+    synth.onvoiceschanged = fillVoices;
+  }
+
+  const playBtn = h("button", { class: "gold", disabled: !synth || !done }, "▶ Escuchar");
+  const pauseBtn = h("button", { class: "ghost", disabled: true }, "Pausa");
+  const stopBtn = h("button", { class: "ghost", disabled: true }, "Detener");
+  const setButtons = () => {
+    playBtn.textContent = speech.active && speech.paused ? "▶ Seguir" : "▶ Escuchar";
+    playBtn.disabled = !synth || !done || (speech.active && !speech.paused);
+    pauseBtn.disabled = !speech.active || speech.paused;
+    stopBtn.disabled = !speech.active;
+  };
+
+  const speakFrom = (start) => {
+    stopSpeech();
+    const token = speech.token;
+    speech.active = true;
+    setButtons();
+    const voice = synth.getVoices().find((x) => x.name === voiceSel.value);
+    let k = start;
+    const nextPara = () => {
+      while (k < paras.length && !paras[k].text) k += 1;
+      if (token !== speech.token) return;
+      if (k >= paras.length) { stopSpeech(); setButtons(); return; }
+      const p = paras[k];
+      document.querySelectorAll(".reader-p.speaking").forEach((x) => x.classList.remove("speaking"));
+      p.el.classList.add("speaking");
+      p.el.scrollIntoView({ block: "center", behavior: "smooth" });
+      const chunks = speechChunks(p.text);
+      let c = 0;
+      const sayNext = () => {
+        if (token !== speech.token) return;
+        if (c >= chunks.length) { k += 1; nextPara(); return; }
+        const u = new SpeechSynthesisUtterance(chunks[c]);
+        c += 1;
+        u.lang = voice ? voice.lang : lang;
+        if (voice) u.voice = voice;
+        u.rate = Number(rateSel.value) || 1;
+        u.onend = sayNext;
+        u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") sayNext(); };
+        synth.speak(u);
+      };
+      sayNext();
+    };
+    nextPara();
+  };
+
+  playBtn.onclick = () => {
+    if (speech.active && speech.paused) {
+      synth.resume();
+      speech.paused = false;
+      setButtons();
+      return;
+    }
+    const current = paras.findIndex((p) => p.el.classList.contains("speaking"));
+    speakFrom(current >= 0 ? current : 0);
+  };
+  pauseBtn.onclick = () => { synth.pause(); speech.paused = true; setButtons(); };
+  stopBtn.onclick = () => { stopSpeech(); setButtons(); };
+  paras.forEach((p, k) => p.el.addEventListener("click", () => { if (synth && p.text) speakFrom(k); }));
+
+  const resize = (delta) => {
+    prefs.size = Math.min(1.8, Math.max(0.95, Math.round(((prefs.size || 1.25) + delta) * 100) / 100));
+    savePrefs();
+    page.style.fontSize = `${prefs.size}rem`;
+  };
+
+  put(v,
+    h("div", { class: "review-head reader-head" },
+      h("div", { class: "row" },
+        h("button", { class: "small ghost", onclick: () => go("revision", index) }, "‹ Revisión"),
+        h("div", { style: "flex:1;min-width:0" }, h("div", { class: "eyebrow", style: "margin:0 0 2px" }, "Lectura"),
+          h("h1", { style: "margin:0" }, data.titulo)),
+        h("span", { class: "muted small" }, `${done} de ${data.total} párrafos traducidos`),
+        h("button", { class: "small ghost", title: "Letra más pequeña", onclick: () => resize(-0.1) }, "A−"),
+        h("button", { class: "small ghost", title: "Letra más grande", onclick: () => resize(0.1) }, "A+")),
+      h("div", { class: "row voice-bar" },
+        playBtn, pauseBtn, stopBtn,
+        h("span", { class: "muted small" }, "Voz"), voiceSel, voiceNote,
+        h("span", { class: "muted small" }, "Velocidad"), rateSel,
+        synth ? null : h("span", { class: "muted small" }, "La lectura en voz alta no está disponible en este navegador."))),
+    h("p", { class: "muted small reader-tip" }, "Consejo: escuchar la traducción ayuda a detectar frases torpes, repeticiones y errores que leyendo se escapan. Haz clic en un párrafo para escuchar desde ahí."),
+    page,
+    h("div", { class: "row", style: "justify-content:space-between;max-width:760px;margin:22px auto 0" },
+      prev ? h("button", { class: "ghost", onclick: () => go("lectura", prev.index) }, `‹ ${prev.title || "Anterior"}`) : h("span"),
+      next ? h("button", { class: "ghost", onclick: () => go("lectura", next.index) }, `${next.title || "Siguiente"} ›`) : h("span")));
+  setButtons();
+}
+
 /* ---------------------------------------------------------------- borrar y recuperar la traducción de un capítulo */
 
 async function clearChapter(index, title, done) {
@@ -969,6 +1134,7 @@ async function renderReview(v) {
         h("div", { class: "spacer" }),
         filterSel,
         !manualMode && data.hechos < data.total && !data.omitir ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", index)) }, "Traducir lo pendiente") : null,
+        h("button", { class: "small ghost", title: "Leer el capítulo como en el lector y escucharlo en voz alta", onclick: () => go("lectura", index) }, svgIcon("libro"), "Leer y escuchar"),
         h("button", { class: "small ghost", onclick: () => { const p = $("#manual-panel"); p.hidden = !p.hidden; } }, "Modo manual"),
         h("button", { class: "small " + (approved ? "ghost" : "gold"), disabled: data.hechos < data.total || data.bloqueado, onclick: async () => {
           const d = await guard(() => rpc("set_approved", index, !approved));
