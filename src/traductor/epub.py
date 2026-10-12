@@ -4,6 +4,7 @@ libro traducido (o bilingüe) conservando estructura, estilos e imágenes."""
 from __future__ import annotations
 
 import html
+import io
 import posixpath
 import re
 import zipfile
@@ -498,10 +499,48 @@ class EpubBook:
             root.set(XML_LANG, target_lang)
         return serialize(tree), warnings
 
-    def render_opf(self, *, target_lang: str, bilingual: bool, title: str | None) -> bytes:
+    def cover_item(self) -> dict | None:
+        """La imagen de portada declarada en el OPF (EPUB 3, EPUB 2 o por su nombre)."""
+        images = {k: v for k, v in self.manifest.items()
+                  if v["media_type"].startswith("image/") and v["path"] in self._names}
+        for k, v in images.items():
+            if "cover-image" in v["properties"]:
+                return dict(v, id=k)
+        meta = self.opf.getroot().find(".//opf:metadata/opf:meta[@name='cover']", NS)
+        if meta is not None and meta.get("content") in images:
+            return dict(images[meta.get("content")], id=meta.get("content"))
+        for k, v in images.items():
+            name = (k + " " + posixpath.basename(v["path"])).lower()
+            if "cover" in name or "portada" in name:
+                return dict(v, id=k)
+        return None
+
+    def render_opf(self, *, target_lang: str, bilingual: bool, title: str | None,
+                   new_cover: dict | None = None) -> bytes:
         tree = parse_xml(self.read(self.opf_path))
         root = tree.getroot()
         meta = root.find("opf:metadata", NS)
+        if new_cover is not None:
+            # Portada añadida: nuevo elemento del manifiesto marcado como portada (EPUB 3 y 2).
+            manifest = root.find("opf:manifest", NS)
+            for item in manifest.iterfind("opf:item", NS):
+                props = [x for x in (item.get("properties") or "").split() if x != "cover-image"]
+                if props:
+                    item.set("properties", " ".join(props))
+                elif item.get("properties") is not None:
+                    del item.attrib["properties"]
+            el = etree.SubElement(manifest, f"{{{NS['opf']}}}item")
+            el.set("id", new_cover["id"])
+            el.set("href", new_cover["href"])
+            el.set("media-type", new_cover["media_type"])
+            if root.get("version", "").startswith("3"):
+                el.set("properties", "cover-image")
+            if meta is not None:
+                for old in meta.findall("opf:meta[@name='cover']", NS):
+                    meta.remove(old)
+                cov = etree.SubElement(meta, f"{{{NS['opf']}}}meta")
+                cov.set("name", "cover")
+                cov.set("content", new_cover["id"])
         langs = root.findall(".//dc:language", NS)
         if bilingual:
             if meta is not None and not any((l.text or "").strip() == target_lang for l in langs):
@@ -521,12 +560,35 @@ class EpubBook:
         return serialize(tree)
 
     def write(self, out_path: str | Path, translations: dict[int, list[str | None]], *,
-              target_lang: str, bilingual: bool = False, title: str | None = None) -> list[str]:
+              target_lang: str, bilingual: bool = False, title: str | None = None, cover=None) -> list[str]:
         """Escribe el EPUB traducido. ``translations`` va de índice de
         documento a la lista de traducciones (marcadas) por segmento; ``None``
-        deja el segmento original. Devuelve avisos para revisión."""
+        deja el segmento original. ``cover``, si se da, es una función
+        ``(formato, imagen_original, proporción) -> bytes`` que crea la portada
+        nueva. Devuelve avisos para revisión."""
         warnings: list[str] = []
         modified: dict[str, bytes] = {}
+        added: dict[str, bytes] = {}
+        new_cover = None
+        if cover is not None:
+            item = self.cover_item()
+            original = self.read(item["path"]) if item else None
+            aspect = 1.5
+            if original:
+                try:
+                    from PIL import Image
+
+                    with Image.open(io.BytesIO(original)) as im:
+                        aspect = min(1.8, max(1.2, im.height / im.width))
+                except Exception:
+                    pass
+            if item and item["media_type"] in ("image/jpeg", "image/png"):
+                modified[item["path"]] = cover("PNG" if item["media_type"] == "image/png" else "JPEG", original, aspect)
+            else:
+                href = "jeronimo-portada.jpg"
+                path = posixpath.join(self.opf_dir, href) if self.opf_dir else href
+                added[path] = cover("JPEG", original, aspect)
+                new_cover = {"id": "jeronimo-portada", "href": href, "media_type": "image/jpeg"}
         for doc in self.documents:
             tr = translations.get(doc.index)
             if not tr or not any(tr):
@@ -534,7 +596,8 @@ class EpubBook:
             data, warns = self.render_document(doc, tr, target_lang=target_lang, bilingual=bilingual)
             modified[doc.path] = data
             warnings.extend(warns)
-        modified[self.opf_path] = self.render_opf(target_lang=target_lang, bilingual=bilingual, title=title)
+        modified[self.opf_path] = self.render_opf(target_lang=target_lang, bilingual=bilingual, title=title,
+                                                  new_cover=new_cover)
 
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -554,6 +617,10 @@ class EpubBook:
                     continue
                 info.compress_type = zipfile.ZIP_DEFLATED
                 zout.writestr(info, modified.get(src.filename) or self.read(src.filename))
+            for name, data in added.items():
+                info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                zout.writestr(info, data)
         tmp.replace(out_path)
         return warnings
 

@@ -798,6 +798,58 @@ class Api:
             raise ValueError("Espera a que termine la tarea en curso.")
         return finder.undo_replacement(self._need_project())
 
+    # -- portada traducida ---------------------------------------------------------
+
+    def cover_settings(self) -> dict:
+        p = self._need_project()
+        with EpubBook(p.book_path) as book:
+            has_original = book.cover_item() is not None
+        return dict(p.cover_settings(), tiene_original=has_original)
+
+    def set_cover(self, values: dict) -> dict:
+        p = self._need_project()
+        current = p.cover_settings()
+        style = values.get("estilo", current["estilo"])
+        if style not in ("difuminada", "lisa"):
+            raise ValueError("Estilo de portada desconocido.")
+        p.config["portada"] = {"usar": bool(values.get("usar", current["usar"])), "estilo": style,
+                               "titulo": str(values.get("titulo", current["titulo"])).strip(),
+                               "autor": str(values.get("autor", current["autor"])).strip()}
+        p.save_config()
+        return self.cover_settings()
+
+    def cover_preview(self, values: dict | None = None) -> dict:
+        """Vista previa de la portada nueva y de la original (imágenes pequeñas)."""
+        import base64
+        import io
+
+        from PIL import Image
+
+        from ..cover import make_cover, unsupported_chars
+
+        p = self._need_project()
+        cfg = dict(p.cover_settings(), **(values or {}))
+        with EpubBook(p.book_path) as book:
+            item = book.cover_item()
+            original = book.read(item["path"]) if item else None
+        aspect, thumb = 1.5, None
+        if original:
+            try:
+                with Image.open(io.BytesIO(original)) as im:
+                    aspect = min(1.8, max(1.2, im.height / im.width))
+                    small = im.convert("RGB")
+                    small.thumbnail((360, 640))
+                    buf = io.BytesIO()
+                    small.save(buf, "JPEG", quality=85)
+                    thumb = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+            except Exception:
+                original = None
+        missing = sorted(unsupported_chars(cfg["titulo"] + cfg["autor"]))
+        new = make_cover(cfg["titulo"], cfg["autor"], style=cfg["estilo"], original=original, aspect=aspect,
+                         size=(360, round(360 * aspect)))
+        return {"nueva": "data:image/jpeg;base64," + base64.b64encode(new).decode("ascii"),
+                "original": thumb, "faltan": missing[:20]}
+
     # -- exportación -----------------------------------------------------------
 
     def export(self, bilingual: bool = False) -> dict:

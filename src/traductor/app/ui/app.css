@@ -566,6 +566,16 @@ button.link.inline { font-family: inherit; font-size: inherit; font-weight: 600;
 .d-del { background: var(--danger-soft); color: var(--danger); text-decoration: line-through !important; text-decoration-thickness: 1px !important; }
 .d-ins { background: var(--ok-soft); color: var(--ok); }
 
+.cover-layout { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; margin-top: 8px; }
+.cover-previews { display: flex; gap: 18px; }
+.cover-fig { margin: 0; text-align: center; transition: opacity .2s; }
+.cover-fig.off { opacity: .35; }
+.cover-fig figcaption { margin-top: 8px; font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.cover-img {
+  display: block; width: 170px; min-height: 120px; border-radius: 4px; background: var(--paper-2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .12), 0 14px 28px -12px rgba(0, 0, 0, .45);
+}
+
 .card.manual { border-top: 3px solid var(--gold-bright); background: linear-gradient(180deg, var(--gold-wash), var(--card) 140px); }
 .manual textarea { min-height: 160px; font-family: var(--mono); font-size: .84rem; }
 .manual ol li::marker { color: var(--gold); font-weight: 700; }

@@ -33,6 +33,7 @@ version = { attr = "traductor.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
+"traductor" = ["assets/fonts/*"]
 "traductor.app" = ["ui/*", "ui/fonts/*"]
 
 [tool.pytest.ini_options]

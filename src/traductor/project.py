@@ -401,5 +401,25 @@ class Project:
         out = Path(out_path) if out_path else self.root / "salida" / f"{stem}.{suffix}.epub"
         with EpubBook(self.book_path) as book:
             warnings = book.write(out, translations, target_lang=self.target_lang,
-                                  bilingual=bilingual, title=None if bilingual else title)
+                                  bilingual=bilingual, title=None if bilingual else title,
+                                  cover=None if bilingual else self.cover_maker())
         return out, warnings
+
+    def cover_settings(self) -> dict:
+        """Portada traducida: si se usa, estilo, título y autor que se muestran."""
+        saved = self.config.get("portada") or {}
+        return {"usar": bool(saved.get("usar")), "estilo": saved.get("estilo") or "difuminada",
+                "titulo": saved.get("titulo") or self.config.get("titulo_traducido") or self.config.get("titulo", ""),
+                "autor": saved.get("autor") or self.config.get("autor", "")}
+
+    def cover_maker(self, settings: dict | None = None):
+        """Función que crea la portada nueva para ``EpubBook.write`` (o None)."""
+        from .cover import make_cover
+
+        from .cover import unsupported_chars
+
+        cfg = settings or self.cover_settings()
+        if not cfg["usar"] or unsupported_chars(cfg["titulo"] + cfg["autor"]):
+            return None  # sin portada nueva, o con letras que la tipografía no tiene
+        return lambda fmt, original, aspect: make_cover(cfg["titulo"], cfg["autor"], style=cfg["estilo"],
+                                                          original=original, fmt=fmt, aspect=aspect)

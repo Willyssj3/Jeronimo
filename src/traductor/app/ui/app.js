@@ -1804,11 +1804,12 @@ function renderExport(v) {
   }).catch(() => {});
   const missing = s.progreso.total - s.progreso.hechos;
   put(v,
-    pageHead("Paso 5 de 5", "Exportar", "Genera el EPUB con la traducción. Conserva portada, imágenes, índice y estilos del original."),
+    pageHead("Paso 5 de 5", "Exportar", "Genera el EPUB con la traducción. Conserva imágenes, índice y estilos del original; la portada puede ser la original o una nueva con el título traducido."),
     missing ? h("div", { class: "warn" }, `Aún faltan ${fmt(missing)} párrafos: en el EPUB quedarán en el idioma original.`) : null,
     qaBox,
+    coverCard(),
     h("div", { class: "card stack" },
-      h("div", { class: "field" }, h("label", {}, "Título de la edición traducida"),
+      h("div", { class: "field" }, h("label", {}, "Título de la edición traducida ", h("span", { class: "hint" }, "(el que muestra el lector en la biblioteca)")),
         h("div", { class: "path" }, title, h("button", { class: "ghost", onclick: async () => {
           const sum = await guard(() => rpc("set_settings", { titulo_traducido: title.value.trim() }));
           if (sum) { state.summary = sum; toast("Título guardado."); }
@@ -1817,6 +1818,62 @@ function renderExport(v) {
         h("button", { class: "gold", onclick: () => run(false) }, "Generar EPUB traducido"),
         h("button", { class: "ghost", onclick: () => run(true) }, "Generar EPUB bilingüe"))),
     result);
+}
+
+/* ---------------------------------------------------------------- portada traducida */
+
+function coverCard() {
+  const box = h("div", { class: "card" }, h("p", { class: "muted" }, "Cargando portada…"));
+  guard(() => rpc("cover_settings")).then((cfg) => {
+    if (!cfg) return;
+    box.textContent = "";
+    const use = h("input", { type: "checkbox", checked: cfg.usar });
+    const style = h("select", { style: "width:auto" },
+      h("option", { value: "difuminada", selected: cfg.estilo === "difuminada", disabled: !cfg.tiene_original }, "Con la portada original difuminada de fondo"),
+      h("option", { value: "lisa", selected: cfg.estilo === "lisa" || !cfg.tiene_original }, "Fondo azul tinta con filetes dorados"));
+    const title = h("input", { type: "text", value: cfg.titulo, placeholder: "Título de la edición traducida" });
+    const author = h("input", { type: "text", value: cfg.autor, placeholder: "Autor" });
+    const imgNew = h("img", { class: "cover-img", alt: "Portada nueva" });
+    const imgOld = h("img", { class: "cover-img", alt: "Portada original" });
+    const warn = h("div", {});
+    const values = () => ({ usar: use.checked, estilo: style.value, titulo: title.value, autor: author.value });
+    let timer = null;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        await guard(() => rpc("set_cover", values()));
+        const pv = await guard(() => rpc("cover_preview", values()));
+        if (!pv) return;
+        imgNew.src = pv.nueva;
+        if (pv.original) imgOld.src = pv.original;
+        warn.textContent = "";
+        if (pv.faltan.length) {
+          put(warn, h("div", { class: "warn small" }, `La tipografía de la portada no tiene estos caracteres: ${pv.faltan.join(" ")}. Se mantendrá la portada original.`));
+        }
+        newFig.classList.toggle("off", !use.checked);
+      }, 350);
+    };
+    [use, style].forEach((el) => el.addEventListener("change", refresh));
+    [title, author].forEach((el) => el.addEventListener("input", refresh));
+    const newFig = h("figure", { class: "cover-fig" }, imgNew, h("figcaption", {}, "Nueva"));
+    put(box,
+      cardHead("libro", "Portada"),
+      h("div", { class: "cover-layout" },
+        h("div", { class: "stack", style: "flex:1;min-width:280px" },
+          h("label", { class: "row", style: "gap:8px;font-weight:600;margin:0" }, use, "Usar una portada nueva con el título traducido"),
+          h("p", { class: "muted small", style: "margin-bottom:0" }, cfg.tiene_original
+            ? "Se reemplaza la imagen de portada del EPUB (en el lector y en la biblioteca). La edición bilingüe conserva siempre la original."
+            : "El libro no tiene portada: se añadirá esta."),
+          h("div", { class: "field", style: "margin-bottom:0" }, h("label", {}, "Título en la portada"), title),
+          h("div", { class: "field", style: "margin-bottom:0" }, h("label", {}, "Autor en la portada"), author),
+          h("div", { class: "field", style: "margin-bottom:0" }, h("label", {}, "Estilo"), style),
+          warn),
+        h("div", { class: "cover-previews" },
+          cfg.tiene_original ? h("figure", { class: "cover-fig" }, imgOld, h("figcaption", {}, "Original")) : null,
+          newFig)));
+    refresh();
+  });
+  return box;
 }
 
 /* ---------------------------------------------------------------- arranque */
