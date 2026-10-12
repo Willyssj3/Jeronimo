@@ -798,6 +798,39 @@ class Api:
             raise ValueError("Espera a que termine la tarea en curso.")
         return finder.undo_replacement(self._need_project())
 
+    # -- Word y PDF ------------------------------------------------------------------
+
+    DOC_FORMATS = {
+        "docx": ("Exportar a Word", "docx", ""),
+        "docx-bilingue": ("Exportar a Word bilingüe", "docx", "bilingue"),
+        "pdf-a5": ("Exportar a PDF", "pdf", "a5"),
+        "pdf-a4": ("Exportar a PDF", "pdf", "a4"),
+    }
+
+    def export_document(self, kind: str) -> dict:
+        """Exporta a Word o PDF en segundo plano."""
+        from .. import export_docs
+
+        if kind not in self.DOC_FORMATS:
+            raise ValueError("Formato desconocido.")
+        p = self._need_project()
+        name, ext, variant = self.DOC_FORMATS[kind]
+        stem = slugify(p.config.get("nombre") or "libro")
+        suffix = f"bilingue-{p.source_lang}-{p.target_lang}" if variant == "bilingue" else p.target_lang
+        out = p.root / "salida" / f"{stem}.{suffix}{'.' + variant if variant in ('a5', 'a4') else ''}.{ext}"
+
+        def run(task: TaskRunner):
+            task.log(f"Creando {out.name}…")
+            if ext == "docx":
+                export_docs.export_docx(p, out, bilingual=variant == "bilingue", progress=task.progress)
+            else:
+                export_docs.export_pdf(p, out, page=variant, progress=task.progress)
+            task.log("Listo.")
+            return {"ruta": str(out), "formato": kind}
+
+        self._tasks.start(name, run)
+        return self.task_status()
+
     # -- portada traducida ---------------------------------------------------------
 
     def cover_settings(self) -> dict:

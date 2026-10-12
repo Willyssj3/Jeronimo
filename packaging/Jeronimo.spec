@@ -8,6 +8,8 @@ datas = (
     + collect_data_files("pdfminer")
     + collect_data_files("pypdfium2_raw")
     + collect_data_files("pypdfium2")
+    + collect_data_files("docx")
+    + collect_data_files("reportlab")
 )
 binaries = collect_dynamic_libs("pypdfium2_raw")
 hiddenimports = (

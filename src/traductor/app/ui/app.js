@@ -1808,6 +1808,7 @@ function renderExport(v) {
     missing ? h("div", { class: "warn" }, `Aún faltan ${fmt(missing)} párrafos: en el EPUB quedarán en el idioma original.`) : null,
     qaBox,
     coverCard(),
+    otherFormatsCard(),
     h("div", { class: "card stack" },
       h("div", { class: "field" }, h("label", {}, "Título de la edición traducida ", h("span", { class: "hint" }, "(el que muestra el lector en la biblioteca)")),
         h("div", { class: "path" }, title, h("button", { class: "ghost", onclick: async () => {
@@ -1818,6 +1819,26 @@ function renderExport(v) {
         h("button", { class: "gold", onclick: () => run(false) }, "Generar EPUB traducido"),
         h("button", { class: "ghost", onclick: () => run(true) }, "Generar EPUB bilingüe"))),
     result);
+}
+
+/* ---------------------------------------------------------------- Word y PDF */
+
+function otherFormatsCard() {
+  const busy = state.task && state.task.activa;
+  const last = state.lastTask && /^Exportar a (Word|PDF)/.test(state.lastTask.nombre) ? state.lastTask : null;
+  const r = last && last.resultado;
+  const btn = (kind, label) => h("button", { class: "ghost", disabled: busy, onclick: () => startTask(() => rpc("export_document", kind)) }, label);
+  return h("div", { class: "card stack" },
+    cardHead("pdf", "Otros formatos"),
+    h("p", { class: "muted", style: "margin-bottom:0" }, "Para correctores, editoriales o para imprimir. Conservan cursivas, negritas y llamadas a notas; las imágenes van solo en el EPUB."),
+    h("div", { class: "row" },
+      btn("docx", "Word (.docx)"),
+      btn("docx-bilingue", "Word bilingüe (tabla)"),
+      btn("pdf-a5", "PDF tamaño libro (A5)"),
+      btn("pdf-a4", "PDF A4")),
+    r ? h("div", { class: "result" },
+      h("p", {}, h("strong", {}, "Listo: "), r.ruta),
+      h("button", { class: "ghost small", onclick: () => rpc("open_folder", r.ruta) }, "Abrir carpeta")) : null);
 }
 
 /* ---------------------------------------------------------------- portada traducida */
