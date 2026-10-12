@@ -25,7 +25,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Instalar
-        run: pip install -e ".[dev]"
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr tesseract-ocr-spa
+          pip install -e ".[dev]"
       - name: Pruebas
         run: python -m pytest -q
 
@@ -55,6 +57,9 @@ jobs:
             exit 1
           fi
           test -f "docs/versiones/$PUBLICAR.md" || { echo "Faltan las notas docs/versiones/$PUBLICAR.md"; exit 1; }
+      - name: Probar el OCR de Windows
+        continue-on-error: true
+        run: python packaging\prueba_ocr_windows.py
       - name: Construir la app (PyInstaller)
         working-directory: packaging
         run: pyinstaller --noconfirm --distpath ..\dist --workpath ..\build Jeronimo.spec

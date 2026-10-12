@@ -251,7 +251,7 @@ class Api:
         self._tasks.start("Convertir PDF a EPUB", run)
         return self.task_status()
 
-    def convert_book(self, path: str, out_path: str = "") -> dict:
+    def convert_book(self, path: str, out_path: str = "", ocr_lang: str = "") -> dict:
         """Convierte a EPUB un PDF, Word, TXT, FB2, MOBI o AZW3 (en segundo plano)."""
         from ..convert import FORMATS, convert, kind_of
 
@@ -266,14 +266,15 @@ class Api:
 
         def run(task: TaskRunner):
             task.log(f"Convirtiendo «{src.name}» ({FORMATS[kind]})…")
-            result, report = convert(src, out, progress=task.progress)
+            result, report = convert(src, out, progress=task.progress, ocr_lang=ocr_lang, should_stop=task.cancelled)
             task.log(f"Listo: {report.chapters} capítulos, {report.notes} notas.")
             for w in report.warnings:
                 task.log(f"Aviso: {w}")
             return {"ruta": str(result), "formato": FORMATS[kind], "paginas": report.pages,
                     "capitulos": report.chapters, "notas": report.notes, "lineas_quitadas": report.removed_lines,
                     "paginas_omitidas": report.dropped_pages, "avisos": report.warnings,
-                    "titulo": report.title, "autor": report.author, "idioma": report.language}
+                    "titulo": report.title, "autor": report.author, "idioma": report.language,
+                    "ocr": report.ocr}
 
         self._tasks.start("Convertir a EPUB", run)
         return self.task_status()

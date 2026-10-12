@@ -402,7 +402,8 @@ def calibre_convert(path: Path, out: Path) -> None:
 
 
 def convert(path: str | Path, out_path: str | Path | None = None, *, title: str | None = None,
-            author: str | None = None, language: str | None = None, progress=None) -> tuple[Path, Report]:
+            author: str | None = None, language: str | None = None, progress=None, ocr_lang: str = "",
+            should_stop=None) -> tuple[Path, Report]:
     """Convierte un libro (PDF, DOCX, TXT, FB2, MOBI, AZW3) a EPUB."""
     path = Path(path)
     if not path.is_file():
@@ -417,7 +418,8 @@ def convert(path: str | Path, out_path: str | Path | None = None, *, title: str 
     if kind == ".pdf":
         from .pdf2epub import convert as pdf_convert
 
-        return pdf_convert(path, out, title=title, author=author, language=language, progress=progress)
+        return pdf_convert(path, out, title=title, author=author, language=language, progress=progress,
+                           ocr_lang=ocr_lang, should_stop=should_stop)
 
     report = Report()
     if kind in (".mobi", ".azw3", ".azw"):

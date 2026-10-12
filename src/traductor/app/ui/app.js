@@ -487,12 +487,16 @@ function pdfCard() {
     cardHead("pdf", "Convertir a EPUB"),
     h("p", { class: "muted" }, "Convierte tus libros en PDF (con texto seleccionable), Word, TXT o FB2, y los de Kindle sin DRM (MOBI, AZW3; requiere Calibre), en un EPUB listo para tu lector o para traducir. Detecta capítulos, cursivas y notas al pie; en los PDF, además, quita encabezados y números de página y une las palabras cortadas."),
     h("div", { class: "field" }, h("label", {}, "Archivo ", h("span", { class: "hint" }, "(PDF, Word, TXT, FB2, MOBI o AZW3)")), pathField("pdf-in", "C:\\Libros\\mi-libro.pdf", "libro")),
-    h("div", { class: "field" }, h("label", {}, "Guardar EPUB en ", h("span", { class: "hint" }, "(opcional; por defecto, junto al PDF)")),
-      h("input", { id: "pdf-out", type: "text", placeholder: "C:\\Libros\\mi-libro.epub" })),
+    h("div", { class: "row", style: "align-items:flex-end" },
+      h("div", { class: "field", style: "flex:2;min-width:260px" }, h("label", {}, "Guardar EPUB en ", h("span", { class: "hint" }, "(opcional; por defecto, junto al archivo)")),
+        h("input", { id: "pdf-out", type: "text", placeholder: "C:\\Libros\\mi-libro.epub" })),
+      h("div", { class: "field", style: "flex:1;min-width:200px" }, h("label", {}, "Idioma del libro ", h("span", { class: "hint" }, "(para PDF escaneados)")),
+        h("select", { id: "ocr-lang" }, h("option", { value: "" }, "Detectar (inglés y español)"),
+          Object.entries(state.info.idiomas).map(([k, name]) => h("option", { value: k }, name))))),
     h("div", { class: "row end" }, h("button", { disabled: busy, onclick: () => {
       const pdf = $("#pdf-in").value.trim();
       if (!pdf) return toast("Elige el archivo que quieres convertir.", true);
-      startTask(() => rpc("convert_book", pdf, $("#pdf-out").value.trim()));
+      startTask(() => rpc("convert_book", pdf, $("#pdf-out").value.trim(), $("#ocr-lang").value));
     } }, "Convertir")),
     r ? h("div", { class: "result" },
       h("p", { style: "margin-top:0" }, h("strong", {}, "EPUB creado: "), r.ruta),
@@ -501,7 +505,8 @@ function pdfCard() {
         + ` · ${plural(r.capitulos, "capítulo", "capítulos")} · ${plural(r.notas, "nota", "notas")}`
         + (r.lineas_quitadas ? ` · ${fmt(r.lineas_quitadas)} encabezados o números de página quitados` : "")
         + ((r.paginas_omitidas || []).length ? ` · índice impreso omitido (pág. ${r.paginas_omitidas.join(", ")})` : "")),
-      r.avisos.map((w) => h("p", { class: "warn small" }, w)),
+      r.ocr ? h("p", { class: "note small" }, `Texto reconocido con OCR (${r.ocr}): revisa el EPUB antes de traducirlo.`) : null,
+      r.avisos.filter((w) => !w.startsWith("PDF escaneado")).map((w) => h("p", { class: "warn small" }, w)),
       h("p", { class: "muted small" }, "Revísalo en tu lector: si algún encabezado o nota quedó mal, avísanos para mejorar el conversor."),
       h("div", { class: "row" },
         h("button", { class: "ghost", onclick: () => rpc("open_folder", r.ruta) }, "Abrir carpeta"),

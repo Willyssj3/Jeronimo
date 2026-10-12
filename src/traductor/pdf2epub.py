@@ -89,6 +89,7 @@ class Report:
     language: str = ""
     title: str = ""
     author: str = ""
+    ocr: str = ""  # motor de OCR usado (si el PDF estaba escaneado)
 
 
 # ---------------------------------------------------------------------------
@@ -759,9 +760,19 @@ def build_epub(blocks: list[Block], notes: dict[str, list[Run]], *, title: str, 
 # Punto de entrada
 
 
+def is_scanned(pages: list[Page]) -> bool:
+    """¿Páginas casi sin texto? (un PDF escaneado: sus páginas son imágenes)."""
+    chars = sum(len(line.text) for p in pages for line in p.lines)
+    return bool(pages) and chars < 40 * len(pages)
+
+
 def convert(pdf_path: str | Path, out_path: str | Path | None = None, *, title: str | None = None,
-            author: str | None = None, language: str | None = None, progress=None) -> tuple[Path, Report]:
-    """Convierte un PDF en EPUB. Devuelve la ruta del EPUB y un informe."""
+            author: str | None = None, language: str | None = None, progress=None, ocr_lang: str = "",
+            should_stop=None, ocr_engine=None) -> tuple[Path, Report]:
+    """Convierte un PDF en EPUB. Devuelve la ruta del EPUB y un informe.
+
+    Si el PDF está escaneado, reconoce el texto con OCR (``ocr_lang``: idioma
+    del libro, p. ej. «es»; vacío para probar con los idiomas disponibles)."""
     pdf_path = Path(pdf_path)
     if not pdf_path.is_file():
         raise PdfError(f"No encuentro el archivo «{pdf_path}».")
@@ -769,6 +780,13 @@ def convert(pdf_path: str | Path, out_path: str | Path | None = None, *, title: 
     report = Report()
     pages, meta = read_pdf(pdf_path, progress)
     report.pages = len(pages)
+    if is_scanned(pages):
+        from .ocr import ocr_pdf
+
+        pages, report.ocr = ocr_pdf(pdf_path, ocr_lang or language or "", progress=progress,
+                                    should_stop=should_stop, engine=ocr_engine)
+        report.warnings.append(f"PDF escaneado: el texto se reconoció con {report.ocr}. Revisa el resultado; "
+                               "las cursivas y negritas no se reconocen.")
     if progress:
         progress(0.75, "Reconstruyendo párrafos y capítulos…")
     blocks, notes, _ids = analyze(pages, report)

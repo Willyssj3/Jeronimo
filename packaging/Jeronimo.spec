@@ -15,6 +15,7 @@ binaries = collect_dynamic_libs("pypdfium2_raw")
 hiddenimports = (
     collect_submodules("traductor")
     + collect_submodules("keyring.backends")
+    + collect_submodules("winrt")
     + ["win32ctypes.core"]
 )
 
