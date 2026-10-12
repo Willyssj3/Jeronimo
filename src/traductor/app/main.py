@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from pathlib import Path
 
+from .. import updates
 from ..i18n import tr
 from .api import Api, Bridge, _log_error
 from .server import UI_DIR, serve
+
+# Las pruebas de la app empaquetada (sin consola) leen de este archivo la dirección del modo navegador.
+ADDRESS_FILE_ENV = "JERONIMO_DIRECCION_EN"
 
 
 def _say(msg: str) -> None:
@@ -20,6 +26,8 @@ def run_browser(port: int = 0, open_browser: bool = True) -> int:
     api = Api(mode="navegador")
     api.init_language()
     server, url = serve(api, port=port, open_browser=open_browser)
+    if os.environ.get(ADDRESS_FILE_ENV):
+        Path(os.environ[ADDRESS_FILE_ENV]).write_text(url, encoding="utf-8")
     _say(tr("Jerónimo abierto en {url}", url=url))
     _say(tr("Para salir, pulsa «Salir» en la app o cierra esta ventana."))
     try:
@@ -35,6 +43,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--puerto", type=int, default=0)
     parser.add_argument("--sin-abrir", action="store_true", help="no abrir el navegador automáticamente")
     args = parser.parse_args(argv)
+    try:
+        updates.cleanup_leftovers()  # la copia vieja que dejó la última actualización
+    except OSError:
+        pass
 
     if not args.navegador:
         try:

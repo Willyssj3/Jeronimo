@@ -1,0 +1,29 @@
+Jerónimo — traductor de libros con IA
+=====================================
+
+PARA ABRIRLO
+Haz doble clic en «Jeronimo.exe» (está en esta misma carpeta).
+
+Si Windows muestra «Windows protegió su PC», pulsa «Más información» y
+después «Ejecutar de todas formas». Pasa solo la primera vez: el programa
+todavía no tiene firma digital.
+
+LA CARPETA
+Puedes dejar esta carpeta donde quieras, por ejemplo en Documentos. La
+primera vez, Jerónimo te ofrece crear accesos directos en el escritorio y en
+el menú Inicio. Si después mueves la carpeta, vuelve a crearlos.
+
+ACTUALIZACIONES
+Cuando haya una versión nueva, Jerónimo te avisa al abrirlo y se actualiza
+solo con un clic. Tus proyectos, ajustes y claves se guardan aparte y no se
+pierden.
+
+Más información y ayuda: https://github.com/Willyssj3/Jeronimo
+
+
+English: double-click «Jeronimo.exe» to open the app. If Windows shows
+«Windows protected your PC», click «More info» and then «Run anyway».
+
+Português: clique duas vezes em «Jeronimo.exe» para abrir o app. Se o Windows
+mostrar «O Windows protegeu o computador», clique em «Mais informações» e
+depois em «Executar assim mesmo».

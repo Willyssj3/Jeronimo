@@ -2,13 +2,14 @@
 
 Jerónimo es una app de escritorio para Windows, libre y gratuita, que traduce libros EPUB con IA
 imitando la voz del traductor oficial del autor: aprende de otros libros del mismo autor junto con
-su traducción oficial (pares de referencia). Repositorio público: https://github.com/Willyssj3/TraductordeLibros
+su traducción oficial (pares de referencia). Repositorio público: https://github.com/Willyssj3/Jeronimo
+(se llamaba «TraductordeLibros» y era privado hasta el 12/10/2026; GitHub redirige el nombre viejo).
 
 ## Cómo trabajamos (léelo primero)
 
 - **Escribe siempre en español** al usuario: respuestas, preguntas, descripciones de comandos,
-  nombres de tareas y mensajes de commit. Él no programa: explica qué hiciste y para qué sirve,
-  con palabras simples y sin jerga.
+  nombres de tareas y mensajes de commit. El usuario no programa: explica qué hiciste y para qué
+  sirve, con palabras simples y sin jerga.
 - Cuando haya que decidir algo que es suyo (funciones, diseño, publicar), pregúntale con opciones
   para elegir (herramienta AskUserQuestion), con la recomendada primero y marcada «(Recomendado)».
   Lo técnico resuélvelo tú.
@@ -34,8 +35,8 @@ su traducción oficial (pares de referencia). Repositorio público: https://gith
 ## Puesta en marcha en Windows
 
 ```
-git clone -b claude/book-translation-spanish-vr753r https://github.com/Willyssj3/TraductordeLibros.git
-cd TraductordeLibros
+git clone -b claude/book-translation-spanish-vr753r https://github.com/Willyssj3/Jeronimo.git
+cd Jeronimo
 py -3.12 -m venv .venv
 .venv\Scripts\activate
 pip install -e .[dev,escritorio]   # «escritorio»: ventana propia y claves en el almacén de Windows
@@ -58,6 +59,11 @@ convertir MOBI/AZW3.
 - Pruebas incluidas: flujo completo (`ui_test`), revisión, calidad, buscar y reemplazar, borrar
   traducción, perfiles, paquete para Proyectos, lectura, modo manual con plan, formatos de entrada
   (todas en español, buscan los botones por su texto).
+- `python tools/prueba_actualizacion.py CARPETA_DIST`: prueba de punta a punta de la actualización
+  automática con la app empaquetada (`pyinstaller` desde `packaging/`): un GitHub falso local
+  sirve una «versión 9.9.9», la app vieja la descarga, se cierra, el ayudante cambia la carpeta y
+  la app se vuelve a abrir sola (abre una ventana de Jerónimo unos segundos). Córrela antes de
+  publicar si tocaste `updates.py`, `main.py` o el empaquetado.
 - `ui_idiomas_test.mjs` recorre las 38 pantallas en el idioma pedido (`correr.py
   ui_idiomas_test.mjs 8765 en`), busca los botones por su texto traducido y avisa de textos de la
   interfaz que sigan en español (lista en `pruebas-ui/ui_idiomas_test-en/textos-a-revisar.txt`).
@@ -78,7 +84,10 @@ convertir MOBI/AZW3.
     (segunda pasada con IA), `qa.py` (control de calidad sin IA), `search.py` (buscar y reemplazar),
     `profiles.py` (perfiles de autor), `cover.py` (portada traducida), `export_docs.py` (Word y PDF),
     `convert.py` + `pdf2epub.py` + `ocr.py` (convertir PDF, Word, TXT, FB2, MOBI a EPUB, con OCR),
-    `updates.py` (aviso de versión nueva), `i18n.py` + `locales/` (idiomas de la interfaz),
+    `updates.py` (versión nueva: aviso, descarga del ZIP, reemplazo de la carpeta con un ayudante
+    de PowerShell y vuelta atrás), `components.py` (lo que puede faltar: WebView2, Calibre con
+    winget, páginas de Configuración de Windows, accesos directos), `i18n.py` + `locales/`
+    (idiomas de la interfaz),
     `providers/` (Anthropic, OpenAI y compatibles, Gemini, Ollama…), `cli.py` (línea de comandos,
     solo en español).
   - `app/`: `main.py` arranca la ventana (pywebview) o el navegador; `server.py` es el servidor
@@ -90,9 +99,18 @@ convertir MOBI/AZW3.
     `render*`), `app.css` (estética del logo: azul tinta y dorado, tipografía EB Garamond), `fonts/`.
 - Ajustes del usuario: `%APPDATA%\TraductorDeLibros\ajustes.json` (recientes, idioma, aviso de
   versión). Errores imprevistos: `registro.txt` en esa misma carpeta.
-- `packaging/`: PyInstaller (`Jeronimo.spec`), instalador Inno Setup (`instalador.iss`), prueba del
-  OCR de Windows. `.github/workflows/build.yml`: pruebas en Linux, compilación del instalador y la
-  versión portátil en Windows, y publicación de versiones.
+- `packaging/`: PyInstaller (`Jeronimo.spec`, carpeta con `Jeronimo.exe` y `_internal`),
+  `LEEME.txt` (va dentro de la carpeta), prueba del OCR de Windows. `.github/workflows/build.yml`:
+  pruebas en Linux, compilación en Windows y publicación. **Se distribuye solo como carpeta
+  portable** (decisión del usuario, 12/10/2026): `Jeronimo-Windows.zip`, siempre con ese nombre,
+  así `https://github.com/Willyssj3/Jeronimo/releases/latest/download/Jeronimo-Windows.zip`
+  baja siempre la última versión y la app la reconoce para actualizarse sola. No hay instalador.
+- Actualización automática: al abrir, si hay versión nueva, la app pregunta; con «Actualizar
+  ahora» descarga el ZIP (solo de las descargas del proyecto; tamaño y SHA-256), lo descomprime en
+  `<carpeta>.nuevo`, se cierra y el ayudante pone la carpeta nueva en lugar de la vieja (que queda
+  como `<carpeta>.anterior` hasta que la nueva arranca) y la vuelve a abrir. Solo se reemplaza una
+  carpeta que tenga únicamente los archivos de la app (`updates.APP_FILES`); si no, abre la página.
+  La primera vez ofrece accesos directos (escritorio y menú Inicio).
 - `docs/PLAN.md` (plan y decisiones), `docs/versiones/vX.Y.Z.md` (notas de cada versión).
 
 ## Idiomas de la interfaz (español, inglés, portugués)
@@ -118,11 +136,13 @@ convertir MOBI/AZW3.
 1. Subir `__version__` en `src/traductor/__init__.py` (por ejemplo `0.3.0`).
 2. Escribir las notas en `docs/versiones/v0.3.0.md` (en español, para el usuario final) y
    actualizar el README si hace falta.
-3. Commit y push; esperar que las pruebas pasen.
-4. Ejecutar el flujo «Pruebas e instalador de Windows» a mano con el campo `publicar` = `v0.3.0`
-   (`gh workflow run build.yml --ref claude/book-translation-spanish-vr753r -f publicar=v0.3.0`, o
-   en GitHub: Actions → el flujo → «Run workflow»). Crea la etiqueta y la versión con el
-   instalador y el ZIP portátil. La app avisa sola a quienes tienen una versión anterior.
+3. Commit y push; esperar que las pruebas pasen (`gh run list --branch <rama>`).
+4. Ejecutar el flujo «Pruebas y versión portable de Windows» a mano con el campo `publicar` =
+   `v0.3.0` (`gh workflow run build.yml --ref claude/book-translation-spanish-vr753r -f
+   publicar=v0.3.0`, o en GitHub: Actions → el flujo → «Run workflow»). Crea la etiqueta y la
+   versión con `Jeronimo-Windows.zip`. La app avisa sola a quienes tienen una versión anterior.
+5. Comprobar que el enlace fijo de descarga baja el ZIP nuevo y que el aviso llega (la API pública
+   `https://api.github.com/repos/Willyssj3/Jeronimo/releases/latest` responde sin usuario).
 
 ## Estado y pendientes
 
@@ -130,14 +150,18 @@ Versión publicada: **0.2.0**. Desde entonces se agregaron (sin publicar todaví
 calidad, buscar y reemplazar, vista de lectura con voz, segunda pasada con IA, paquete para
 Proyectos de los chats, perfiles de autor, portada traducida (o una imagen propia), datos del libro
 editables, exportar a Word y PDF, convertir desde Word/TXT/FB2/MOBI/AZW3, OCR para PDF escaneados,
-modo manual con elección de modelo y plan, borrar la traducción de un capítulo y la interfaz
-completa en inglés y portugués (verificada pantalla por pantalla el 12/10/2026).
+modo manual con elección de modelo y plan, borrar la traducción de un capítulo, la interfaz
+completa en inglés y portugués (verificada pantalla por pantalla el 12/10/2026) y la descarga
+portable con actualización automática, instalación de lo que falta (con permiso) y accesos
+directos.
 
 Pendiente, en este orden (lo fijó el usuario):
-1. **Actualizar el README** con todas las funciones nuevas desde la 0.2.0 y capturas actuales
-   (siempre con libros inventados). Ya explica cómo cambiar el idioma.
+1. **Actualizar el README** como presentación para compartir (botón grande de descarga directa,
+   capturas actuales con libros inventados, funciones nuevas, preguntas frecuentes). Ya explica
+   cómo cambiar el idioma. El usuario eligió solo el README, sin página web aparte.
 2. **Preparar la versión 0.3.0** (número y notas en `docs/versiones/v0.3.0.md`) y preguntarle al
-   usuario antes de publicarla (ver «Publicar una versión»).
+   usuario antes de publicarla (ver «Publicar una versión»). Es la primera con `Jeronimo-Windows.zip`
+   y actualización automática: quien tenga la 0.2.0 recibe el aviso de siempre y baja el ZIP a mano.
 3. **Corregir los avisos de calidad con un clic** (después de la 0.3.0; el usuario eligió el
    diseño): botón «Corregir» en cada aviso y uno para todos los de un tipo. Lo mecánico (espacios,
    signos ¿ ¡, guion → raya, nombres con dos grafías) se corrige al instante y se puede deshacer;

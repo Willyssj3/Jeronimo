@@ -290,8 +290,12 @@ async function pollTask() {
         // La tarea pudo terminar antes de la primera consulta: igual se refresca.
         state.taskPending = false;
         state.lastTask = task;
+        if (task.clave === "actualizar" && !task.error && task.resultado) {
+          await finishUpdate(task);
+          return;
+        }
         if (task.error) toast(task.error, true);
-        else toast(t("{nombre}: terminada.", { nombre: task.nombre }));
+        else toast((task.resultado && task.resultado.mensaje) || t("{nombre}: terminada.", { nombre: task.nombre }));
         await refreshSummary();
         render();
       }
@@ -353,6 +357,7 @@ function releaseNotes(text) {
   return box;
 }
 
+/* Al abrir la app: si hay una versión nueva, la ofrece. Con «Más tarde» queda el botón de arriba. */
 async function checkUpdate() {
   const r = await rpc("check_update").catch(() => null);
   if (!r) return;
@@ -360,15 +365,36 @@ async function checkUpdate() {
   btn.textContent = t("Nueva versión {version}", { version: r.version });
   btn.title = t("Hay una versión nueva de Jerónimo");
   btn.hidden = false;
-  btn.onclick = async () => {
-    const ok = await modal(h("div", {},
-      h("div", { class: "eyebrow" }, t("Actualización disponible")),
-      h("h3", {}, t("Jerónimo {version}", { version: r.version })),
-      h("p", {}, t("Tienes la versión {version}. Descarga el instalador nuevo y ejecútalo: se instala encima y conserva tus proyectos, ajustes y claves.", { version: state.info.version })),
-      r.notas ? releaseNotes(r.notas) : null), { ok: t("Descargar"), cancel: t("Ahora no") });
-    if (ok) await guard(() => rpc("open_url", r.url));
-    else btn.hidden = true;
-  };
+  btn.onclick = () => offerUpdate(r);
+  if ($("#modal-backdrop").hidden) await offerUpdate(r);
+}
+
+async function offerUpdate(r) {
+  const ok = await modal(h("div", {},
+    h("div", { class: "eyebrow" }, t("Actualización disponible")),
+    h("h3", {}, t("Jerónimo {version}", { version: r.version })),
+    h("p", {}, r.auto
+      ? t("Tienes la versión {version}. La nueva se descarga sola y Jerónimo se vuelve a abrir en un momento. Tus proyectos, ajustes y claves no se tocan.", { version: state.info.version })
+      : t("Tienes la versión {version}. Descarga la nueva desde la página del proyecto: tus proyectos, ajustes y claves se conservan.", { version: state.info.version })),
+    r.notas ? releaseNotes(r.notas) : null), { ok: r.auto ? t("Actualizar ahora") : t("Descargar"), cancel: t("Más tarde") });
+  if (!ok) return;
+  if (r.auto) await startTask(() => rpc("update_app"));
+  else await guard(() => rpc("open_url", r.url));
+}
+
+/* La versión nueva ya está descargada: Jerónimo se cierra y un ayudante lo vuelve a abrir. */
+async function finishUpdate(task) {
+  document.body.textContent = "";
+  document.body.append(h("div", { class: "updating" },
+    h("img", { src: "logo.svg", alt: "", width: 96, height: 96 }),
+    h("h2", {}, t("Actualizando Jerónimo a la versión {version}…", { version: (task.resultado || {}).version || "" })),
+    h("p", {}, t("Se va a volver a abrir solo en unos segundos.")),
+    state.info && state.info.modo === "navegador" ? h("p", { class: "muted small" }, t("Esta pestaña ya se puede cerrar.")) : null));
+  try {
+    await rpc("restart_for_update");
+  } catch (e) {
+    document.body.append(h("p", { class: "updating-error" }, e.message));
+  }
 }
 
 /* ---------------------------------------------------------------- navegación */
@@ -457,6 +483,9 @@ function renderHome(v) {
     info.perfiles.map((p) => h("option", { value: p.id }, `${p.nombre} · ${plural(p.libros.length, t("libro"), t("libros"))}, ${plural(p.referencias, t("referencia"), t("referencias"))}`))) : null;
 
   put(v,
+    info.falta_webview2 ? h("div", { class: "note row", style: "margin-bottom:18px;padding:10px 14px" },
+      h("span", { style: "flex:1" }, t("Jerónimo se abrió en el navegador porque falta un componente gratuito de Microsoft (WebView2) para su ventana propia.")),
+      h("button", { class: "small", onclick: () => startTask(() => rpc("install_component", "webview2")) }, t("Instalarlo"))) : null,
     h("section", { class: "hero" },
       h("img", { class: "hero-logo", src: "logo.svg", alt: "", width: 108, height: 108 }),
       h("div", {},
@@ -553,11 +582,16 @@ function pdfCard() {
       h("div", { class: "field", style: "flex:1;min-width:200px" }, h("label", {}, t("Idioma del libro "), h("span", { class: "hint" }, t("(para PDF escaneados)"))),
         h("select", { id: "ocr-lang" }, h("option", { value: "" }, t("Detectar (inglés y español)")),
           Object.entries(state.info.idiomas).map(([k, name]) => h("option", { value: k }, name))))),
-    h("div", { class: "row end" }, h("button", { disabled: busy, onclick: () => {
-      const pdf = $("#pdf-in").value.trim();
-      if (!pdf) return toast(t("Elige el archivo que quieres convertir."), true);
-      startTask(() => rpc("convert_book", pdf, $("#pdf-out").value.trim(), $("#ocr-lang").value));
-    } }, t("Convertir"))),
+    h("div", { class: "row end" },
+      state.info.portable ? h("button", { class: "link inline small", type: "button", style: "margin-right:auto",
+        title: t("Para reconocer el texto de PDF escaneados, Windows necesita el idioma del libro instalado."),
+        onclick: () => guard(() => rpc("open_windows_settings", "idioma")) }, t("Agregar idiomas a Windows")) : null,
+      h("button", { disabled: busy, onclick: async () => {
+        const pdf = $("#pdf-in").value.trim();
+        if (!pdf) return toast(t("Elige el archivo que quieres convertir."), true);
+        if (/\.(mobi|azw3?)"?$/i.test(pdf) && !(await ensureCalibre())) return;
+        startTask(() => rpc("convert_book", pdf, $("#pdf-out").value.trim(), $("#ocr-lang").value));
+      } }, t("Convertir"))),
     r ? h("div", { class: "result" },
       h("p", { style: "margin-top:0" }, h("strong", {}, t("EPUB creado: ")), r.ruta),
       h("p", { class: "small" }, t("«{titulo}»", { titulo: r.titulo }) + (r.autor ? " · " + r.autor : "")
@@ -572,6 +606,21 @@ function pdfCard() {
         h("button", { class: "ghost", onclick: () => rpc("open_folder", r.ruta) }, t("Abrir carpeta")),
         h("button", { class: "ghost", onclick: () => { $("#new-epub").value = r.ruta; $("#new-epub").scrollIntoView({ behavior: "smooth" }); toast(t("Elige el idioma y pulsa «Crear proyecto» para traducirlo.")); } }, t("Usarlo para un proyecto de traducción"))))
       : null);
+}
+
+/* Los libros de Kindle necesitan Calibre: si falta, ofrece instalarlo (o abrir su página). */
+async function ensureCalibre() {
+  const c = await guard(() => rpc("component_status"));
+  if (!c || c.calibre || !c.windows) return true;  // ya está (o no es Windows: el error lo explica)
+  const ok = await modal(h("div", {},
+    h("div", { class: "eyebrow" }, t("Falta un programa")),
+    h("h3", {}, "Calibre"),
+    h("p", {}, t("Para abrir libros de Kindle (MOBI, AZW3) hace falta Calibre, un programa gratuito y de código abierto. ¿Lo instalo ahora? Windows puede pedirte permiso.")),
+    c.winget ? h("p", { class: "muted small" }, t("Cuando termine, vuelve a pulsar «Convertir».")) : h("p", { class: "muted small" }, t("Este Windows no puede instalarlo solo: se abrirá la página de descarga de Calibre."))),
+  { ok: c.winget ? t("Instalar Calibre") : t("Abrir la página de Calibre"), cancel: t("Cancelar") });
+  if (ok && c.winget) startTask(() => rpc("install_component", "calibre"));
+  else if (ok) await guard(() => rpc("open_component_page", "calibre"));
+  return false;
 }
 
 async function opened(summary) {
@@ -1209,6 +1258,8 @@ async function renderReader(v) {
     [[0.8, t("Lenta")], [0.9, t("Pausada")], [1, t("Normal")], [1.15, t("Ágil")], [1.3, t("Rápida")]].map(([r, label]) =>
       h("option", { value: r, selected: (prefs.rate || 1) === r }, label)));
   const voiceNote = h("span", { class: "muted small" });
+  const voiceSettings = h("button", { class: "small ghost", hidden: true, onclick: () => guard(() => rpc("open_windows_settings", "voz")) },
+    t("Abrir la configuración de voz"));
   const fillVoices = () => {
     if (!synth) return;
     const all = synth.getVoices();
@@ -1221,6 +1272,7 @@ async function renderReader(v) {
     voiceNote.textContent = mine.length ? "" : (all.length
       ? t("Windows no tiene voces instaladas para «{lang}». Añádelas en Configuración → Hora e idioma → Voz.", { lang })
       : t("Cargando voces…"));
+    voiceSettings.hidden = !(state.info.portable && all.length && !mine.length);
   };
   if (synth) {
     fillVoices();
@@ -1302,7 +1354,7 @@ async function renderReader(v) {
         h("button", { class: "small ghost", title: t("Letra más grande"), onclick: () => resize(0.1) }, "A+")),
       h("div", { class: "row voice-bar" },
         playBtn, pauseBtn, stopBtn,
-        h("span", { class: "muted small" }, t("Voz")), voiceSel, voiceNote,
+        h("span", { class: "muted small" }, t("Voz")), voiceSel, voiceNote, voiceSettings,
         h("span", { class: "muted small" }, t("Velocidad")), rateSel,
         synth ? null : h("span", { class: "muted small" }, t("La lectura en voz alta no está disponible en este navegador.")))),
     h("p", { class: "muted small reader-tip" }, t("Consejo: escuchar la traducción ayuda a detectar frases torpes, repeticiones y errores que leyendo se escapan. Haz clic en un párrafo para escuchar desde ahí.")),
@@ -2156,5 +2208,22 @@ function coverCard() {
   }
   await render();
   pollTask();
+  await startupNotices();
   checkUpdate();
 })();
+
+/* Al abrir: aviso de que se actualizó y, la primera vez, accesos directos (con permiso). */
+async function startupNotices() {
+  const n = await rpc("startup_notices").catch(() => null);
+  if (!n) return;
+  if (n.actualizado_a) toast(t("Jerónimo se actualizó a la versión {version}.", { version: n.actualizado_a }));
+  if (!n.ofrecer_accesos) return;
+  const ok = await modal(h("div", {},
+    h("div", { class: "eyebrow" }, t("Bienvenida")),
+    h("h3", {}, t("¿Quieres tener Jerónimo a mano?")),
+    h("p", {}, t("Crea un acceso directo en el escritorio y en el menú Inicio para abrirlo sin buscar la carpeta.")),
+    h("p", { class: "muted small" }, t("Si después mueves la carpeta de Jerónimo, los accesos directos dejan de funcionar."))),
+  { ok: t("Crear accesos directos"), cancel: t("Ahora no") });
+  const made = await guard(() => rpc("create_shortcuts", ok));
+  if (ok && made && made.length) toast(t("Listo: Jerónimo está en el escritorio y en el menú Inicio."));
+}

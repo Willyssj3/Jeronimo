@@ -10,14 +10,15 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import traceback
 import webbrowser
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from .. import __version__, i18n, inline, knowledge, profiles, qa, review, updates
+from .. import __version__, components, i18n, inline, knowledge, profiles, qa, review, updates
 from .. import search as finder
 from ..epub import EpubBook, EpubError
 from ..i18n import N_, tr
@@ -120,6 +121,7 @@ class Api:
         self._tasks = TaskRunner()
         self._provider_factory = provider_factory or make_provider
         self._marks_cache: dict[int, dict[int, dict[int, str]]] = {}
+        self._ready_update: tuple[Path, Path, str] | None = None  # versión nueva ya descargada
 
     # -- ajustes y proyectos recientes ---------------------------------------
 
@@ -157,6 +159,10 @@ class Api:
             "recientes": [dict(r, existe=(Path(r["carpeta"]) / "proyecto.json").exists())
                           for r in self._settings().get("recientes", [])],
             "proyecto_abierto": str(self._project.root) if self._project else None,
+            "portable": updates.app_dir() is not None,
+            # Se abrió en el navegador porque falta el componente de Microsoft para la ventana propia.
+            "falta_webview2": self._mode == "navegador" and updates.app_dir() is not None
+                              and not components.webview2_version(),
         }
 
     # -- idioma de la interfaz ---------------------------------------------------
@@ -209,25 +215,137 @@ class Api:
 
     # -- versiones nuevas ---------------------------------------------------------
 
-    def check_update(self, force: bool = False) -> dict | None:
-        """La versión publicada más reciente, si es más nueva que esta.
+    UPDATE_EVERY = timedelta(hours=4)
 
-        Consulta GitHub como mucho una vez al día; sin conexión, no avisa."""
+    def check_update(self, force: bool = False) -> dict | None:
+        """La versión publicada más reciente, si es más nueva que esta, con ``auto``
+        si esta copia se puede actualizar sola.
+
+        Consulta GitHub como mucho cada 4 horas; sin conexión, no avisa."""
         settings = self._settings()
         saved = settings.get("actualizacion") or {}
-        today = date.today().isoformat()
         latest = saved.get("ultima")
-        if force or saved.get("consultado") != today:
+        try:
+            stale = datetime.now() - datetime.fromisoformat(str(saved.get("consultado"))) > self.UPDATE_EVERY
+        except ValueError:
+            stale = True
+        if force or stale:
             try:
                 latest = updates.latest_release()
             except Exception:  # sin internet, GitHub no responde…: no molesta a nadie
                 latest = None
             else:
-                settings["actualizacion"] = {"consultado": today, "ultima": latest}
+                settings["actualizacion"] = {"consultado": datetime.now().isoformat(timespec="seconds"),
+                                             "ultima": latest}
                 self._save_settings(settings)
         if latest and updates.is_newer(latest.get("version", ""), __version__):
-            return latest
+            return dict(latest, auto=bool(latest.get("descarga")) and updates.can_self_update())
         return None
+
+    def update_app(self) -> dict:
+        """Descarga y prepara la versión nueva (en segundo plano). Solo en la carpeta portable de Windows."""
+        info = self.check_update(force=True)
+        if not info:
+            raise ValueError(tr("Ya tienes la última versión de Jerónimo."))
+        folder = updates.app_dir()
+        if not info.get("auto") or folder is None:
+            raise ValueError(tr("Esta copia de Jerónimo no se puede actualizar sola. Descarga la versión nueva desde "
+                                "la página del proyecto."))
+
+        def run(task: TaskRunner):
+            archive = Path(tempfile.gettempdir()) / f"Jeronimo-{info['version']}.zip"
+            task.log(tr("Descargando Jerónimo {version}…", version=info["version"]))
+            updates.download(info["descarga"], archive, size=info.get("tamano") or 0, sha256=info.get("sha256") or "",
+                             progress=lambda f: task.progress(0.9 * f, tr("Descargando… {pct} %", pct=round(100 * f))),
+                             should_stop=task.cancelled)
+            task.progress(0.92, tr("Preparando la versión nueva…"))
+            try:
+                new = updates.unpack(archive, folder)
+            finally:
+                archive.unlink(missing_ok=True)
+            self._ready_update = (folder, new, info["version"])
+            task.log(tr("Listo: Jerónimo se va a cerrar y volver a abrir con la versión {version}.",
+                        version=info["version"]))
+            return {"version": info["version"]}
+
+        self._tasks.start(N_("Actualizar Jerónimo"), run, "actualizar")
+        return self.task_status()
+
+    def restart_for_update(self) -> bool:
+        """Cierra Jerónimo; un ayudante pone la versión nueva en lugar de la vieja y vuelve a abrirlo."""
+        if not self._ready_update:
+            raise ValueError(tr("No hay ninguna actualización lista."))
+        if self._tasks.state["activa"]:
+            raise ValueError(tr("Hay una tarea en curso. Detenla antes de salir."))
+        folder, new, _version = self._ready_update
+        data = self._settings()
+        data["actualizado_desde"] = __version__
+        self._save_settings(data)
+        updates.start_swap(folder, new, os.getpid())
+        threading.Timer(0.8, os._exit, [0]).start()
+        return True
+
+    # -- al abrir la app ----------------------------------------------------------------
+
+    def startup_notices(self) -> dict:
+        """Lo que la interfaz muestra al abrir: si se acaba de actualizar y si ofrecer accesos directos."""
+        data = self._settings()
+        previous = data.pop("actualizado_desde", None)
+        portable = updates.app_dir() is not None
+        offer = portable and not data.get("accesos_ofrecidos")
+        if previous is not None:
+            self._save_settings(data)
+        return {"actualizado_a": __version__ if previous and previous != __version__ else None,
+                "ofrecer_accesos": offer}
+
+    def create_shortcuts(self, create: bool = True) -> list[str]:
+        """Accesos directos en el escritorio y en el menú Inicio (se ofrecen una sola vez)."""
+        data = self._settings()
+        data["accesos_ofrecidos"] = True
+        self._save_settings(data)
+        folder = updates.app_dir()
+        if not create:
+            return []
+        if folder is None:
+            raise ValueError(tr("Los accesos directos solo se crean en la versión para Windows."))
+        return components.create_shortcuts(folder / updates.EXE)
+
+    # -- programas que pueden faltar ------------------------------------------------------
+
+    def component_status(self) -> dict:
+        return components.status()
+
+    INSTALLERS = {"webview2": (N_("Instalar WebView2"), components.install_webview2,
+                               N_("Listo: cierra Jerónimo y vuelve a abrirlo para usar su ventana propia."),
+                               N_("WebView2 no quedó instalado. Puedes descargarlo desde la página de Microsoft.")),
+                  "calibre": (N_("Instalar Calibre"), components.install_calibre,
+                              N_("Listo: Calibre quedó instalado. Ya puedes convertir libros de Kindle."),
+                              N_("Calibre no quedó instalado. Puedes descargarlo desde su página."))}
+
+    def install_component(self, name: str) -> dict:
+        """Instala WebView2 o Calibre (en segundo plano; Windows puede pedir permiso)."""
+        if name not in self.INSTALLERS:
+            raise ValueError(tr("Componente desconocido."))
+        title, install, ok_text, fail_text = self.INSTALLERS[name]
+
+        def run(task: TaskRunner):
+            if not install(task.log):
+                raise ValueError(tr(fail_text))
+            return {"mensaje": tr(ok_text)}
+
+        self._tasks.start(title, run, "componente")
+        return self.task_status()
+
+    def open_component_page(self, name: str) -> bool:
+        """Abre la página de descarga de un programa que falta."""
+        if name not in components.PAGES:
+            raise ValueError(tr("Componente desconocido."))
+        return bool(webbrowser.open(components.PAGES[name]))
+
+    def open_windows_settings(self, page: str) -> bool:
+        """Abre la configuración de Windows para agregar idiomas de OCR o voces."""
+        components.open_settings(page)
+        return True
 
     def open_url(self, url: str) -> bool:
         """Abre en el navegador una página del proyecto (descargas, ayuda)."""

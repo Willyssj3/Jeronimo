@@ -1,4 +1,4 @@
-name: Pruebas e instalador de Windows
+name: Pruebas y versión portable de Windows
 
 on:
   push:
@@ -71,17 +71,18 @@ jobs:
           if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter EBGaramond-SemiBold.ttf)) { exit 1 }
           if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter en.json)) { exit 1 }
           if (!(Get-ChildItem -Recurse dist\Jeronimo -Filter pt.json)) { exit 1 }
-      - name: Crear el instalador (Inno Setup)
+      # Una sola descarga, con nombre fijo: el enlace .../releases/latest/download/Jeronimo-Windows.zip
+      # siempre baja la última versión, y la app la reconoce para actualizarse sola.
+      - name: Versión portable (ZIP)
         run: |
-          choco install innosetup -y --no-progress
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:VERSION" packaging\instalador.iss
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-      - name: Versión portátil (ZIP)
-        run: Compress-Archive -Path dist\Jeronimo\* -DestinationPath "dist\instalador\Jeronimo-$env:VERSION-portable.zip"
+          Copy-Item packaging\LEEME.txt dist\Jeronimo\LEEME.txt
+          New-Item -ItemType Directory -Force dist\salida | Out-Null
+          Compress-Archive -Path dist\Jeronimo -DestinationPath dist\salida\Jeronimo-Windows.zip
+          python -c "import zipfile; z = zipfile.ZipFile(r'dist\salida\Jeronimo-Windows.zip'); n = [m.replace('\\', '/') for m in z.namelist()]; assert 'Jeronimo/Jeronimo.exe' in n and 'Jeronimo/LEEME.txt' in n, n[:5]"
       - uses: actions/upload-artifact@v4
         with:
           name: Jeronimo-Windows
-          path: dist/instalador/*
+          path: dist/salida/*
       - name: Publicar versión
         if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publicar != '')
         uses: softprops/action-gh-release@v2
@@ -90,4 +91,4 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: Jerónimo ${{ inputs.publicar || github.ref_name }}
           body_path: docs/versiones/${{ inputs.publicar || github.ref_name }}.md
-          files: dist/instalador/*
+          files: dist/salida/*
