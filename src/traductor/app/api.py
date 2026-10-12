@@ -298,6 +298,8 @@ class Api:
             opts["chat_manual"] = chat
             if "bloque_manual" not in values:
                 opts["bloque_manual"] = CHAT_PRESETS[chat][1]
+        if "bloques_livianos" in values:
+            p.config.setdefault("opciones", {})["bloques_livianos"] = bool(values["bloques_livianos"])
         if "bloque_manual" in values:
             size = int(values["bloque_manual"])
             if not 1000 <= size <= 60000:
@@ -328,6 +330,8 @@ class Api:
             "revision": cfg.get("revision", "capitulo"),
             "bloque_manual": (cfg.get("opciones") or {}).get("bloque_manual") or DEFAULT_MANUAL_BLOCK,
             "chat_manual": (cfg.get("opciones") or {}).get("chat_manual") or "claude",
+            "bloques_livianos": bool((cfg.get("opciones") or {}).get("bloques_livianos")),
+            "paquete": self._package_state(p),
             "proveedor": prov,
             "tiene_clave": kind in LOCAL_KINDS or bool(get_api_key(kind)),
             "capitulos": [asdict(c) for c in chapters],
@@ -615,6 +619,37 @@ class Api:
         data = self._need_project().load_chapter(index)
         return {"bloques_restantes": len(translator.manual_chunks(data)),
                 "parrafos_pendientes": sum(1 for s in data["segmentos"] if not s.get("tgt"))}
+
+    # -- paquete para Proyectos (claude.ai, ChatGPT, Gemini) -------------------------
+
+    @staticmethod
+    def _package_state(p: Project) -> dict | None:
+        info = p.config.get("paquete")
+        if not info:
+            return None
+        current = Translator(p, None).knowledge_fingerprint()
+        return {"fecha": info.get("fecha", ""), "desactualizado": info.get("huella") != current,
+                "ruta": info.get("ruta", "")}
+
+    def project_package(self) -> dict:
+        """Genera las instrucciones y el archivo de conocimiento para subir a un Proyecto."""
+        p = self._need_project()
+        translator = Translator(p, None)
+        instructions = translator.project_instructions()
+        knowledge_text = translator.project_knowledge()
+        out = p.root / "salida" / f"{slugify(p.config.get('nombre') or 'libro')}-conocimiento.md"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(knowledge_text, encoding="utf-8")
+        (out.parent / out.name.replace("-conocimiento.md", "-instrucciones.md")).write_text(instructions, encoding="utf-8")
+        p.config["paquete"] = {"fecha": datetime.now().isoformat(timespec="minutes"),
+                               "huella": translator.knowledge_fingerprint(), "ruta": str(out)}
+        p.save_config()
+        return {"instrucciones": instructions, "ruta": str(out), "caracteres_instrucciones": len(instructions),
+                "caracteres_conocimiento": len(knowledge_text), "paquete": self._package_state(p)}
+
+    def package_instructions(self) -> str:
+        """Solo el texto de las instrucciones del Proyecto (para copiarlo)."""
+        return Translator(self._need_project(), None).project_instructions()
 
     def manual_status(self, index: int) -> dict:
         translator = Translator(self._need_project(), None)

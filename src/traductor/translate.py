@@ -12,6 +12,8 @@ quien quiera usar la IA desde su navegador.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import time
 from dataclasses import dataclass, field
@@ -77,6 +79,21 @@ def pseudo_slots(source: str) -> dict:
         elif kind == "atom":
             slots[n] = ("x", None)
     return slots
+
+
+def _varied(pairs: list) -> list:
+    """Pares de referencia variados: alterna diálogos y narración, y prefiere
+    los de longitud media (los más útiles como ejemplo)."""
+    useful = [p for p in pairs if 40 <= len(p.src) <= 900]
+    dialogue = [p for p in useful if p.src.lstrip()[:1] in "\"“‘'«—-"]
+    narration = [p for p in useful if p not in dialogue]
+    out = []
+    for k in range(max(len(dialogue), len(narration))):
+        if k < len(narration):
+            out.append(narration[k])
+        if k < len(dialogue):
+            out.append(dialogue[k])
+    return out
 
 
 def _norm(text: str) -> str:
@@ -153,14 +170,15 @@ class Translator:
             used += len(src) + len(tgt)
         return list(reversed(out))
 
-    def build_user(self, data: dict, chunk: list[dict]) -> str:
+    def build_user(self, data: dict, chunk: list[dict], *, light: bool = False) -> str:
         plain = "\n".join(inline.strip_marks(s["src"]) for s in chunk)
         glossary = self.relevant_glossary(plain)
         # Bloques de solo títulos (índices, encabezados): los ejemplos no aportan.
         titles_only = all(len(inline.strip_marks(s["src"])) < 60 for s in chunk)
+        # Con el paquete subido a un Proyecto, bastan un par de ejemplos muy parecidos.
+        k, budget = (2, 1500) if light else (self.options.examples, self.options.example_chars)
         examples = [] if titles_only else self.index.search(
-            plain, k=self.options.examples, max_chars=self.options.example_chars,
-            must_include=[g["termino"] for g in glossary])
+            plain, k=k, max_chars=budget, must_include=[g["termino"] for g in glossary])
         return prompts.translate_user(
             segments=[(s["n"], s["src"]) for s in chunk],
             glossary=glossary,
@@ -281,6 +299,10 @@ class Translator:
         finally:
             self.options.chunk_chars = saved
 
+    def light_blocks(self) -> bool:
+        """¿Bloques livianos? (las instrucciones y el conocimiento ya están en un Proyecto)."""
+        return bool((self.project.config.get("opciones") or {}).get("bloques_livianos"))
+
     def manual_prompt(self, index: int, block_chars: int | None = None) -> tuple[str, list[int], int] | None:
         """Prompt completo del siguiente bloque pendiente, para pegarlo en un chat.
         Devuelve (texto, párrafos del bloque, bloques pendientes en el capítulo)."""
@@ -289,8 +311,57 @@ class Translator:
         if not chunks:
             return None
         chunk = chunks[0]
-        text = self.system + "\n\n" + self.build_user(data, chunk) + prompts.MANUAL_OUTPUT
+        if self.light_blocks():
+            header = prompts.LIGHT_BLOCK_HEADER.format(tgt=prompts.lang_name(self.project.target_lang))
+            text = header + "\n\n" + self.build_user(data, chunk, light=True) + prompts.MANUAL_OUTPUT
+        else:
+            text = self.system + "\n\n" + self.build_user(data, chunk) + prompts.MANUAL_OUTPUT
         return text, [s["n"] for s in chunk], len(chunks)
+
+    # -- paquete para Proyectos ------------------------------------------------
+
+    def knowledge_fingerprint(self) -> str:
+        """Huella de lo que va en el paquete: si cambia, hay que volver a subirlo."""
+        bible = self.project.bible()
+        parts = [self.project.style_guide(), json.dumps(self.glossary, ensure_ascii=False, sort_keys=True),
+                 bible.get("sinopsis", ""), json.dumps(bible.get("capitulos", {}), sort_keys=True),
+                 str(len(self.project.reference_pairs()))]
+        return hashlib.sha1("\u241e".join(parts).encode("utf-8")).hexdigest()[:16]
+
+    def project_instructions(self) -> str:
+        """Texto para las instrucciones del Proyecto (rol, reglas, guía de estilo y sinopsis)."""
+        return self.system.rstrip() + "\n" + prompts.PROJECT_NOTE
+
+    def project_knowledge(self, max_example_chars: int = 50000) -> str:
+        """Archivo de conocimiento: glosario completo, resúmenes y pasajes oficiales."""
+        cfg = self.project.config
+        out = [f"# {cfg.get('titulo') or cfg.get('nombre', '')} — material de referencia para la traducción", ""]
+        if self.glossary:
+            out += ["## Glossary (mandatory renderings)", ""]
+            for g in self.glossary:
+                kind = f" [{g['tipo']}]" if g.get("tipo") else ""
+                note = f" — {g['nota']}" if g.get("nota") else ""
+                out.append(f"- {g['termino']} → {g['traduccion']}{kind}{note}")
+            out.append("")
+        summaries = {int(k): v for k, v in self.chapter_summaries.items() if v}
+        if summaries:
+            titles = {i: (self.project.load_chapter(i).get("titulo") or f"Documento {i}") for i in summaries
+                      if self.project.chapter_path(i).exists()}
+            out += ["## Chapter summaries", ""]
+            for i in sorted(summaries):
+                out.append(f"- {titles.get(i, f'Documento {i}')}: {summaries[i]}")
+            out.append("")
+        pairs = self.project.approved_pairs()[-40:] + self.project.reference_pairs()
+        if pairs:
+            out += ["## Passages from the official translations (and approved passages of this book)", ""]
+            used = 0
+            for ex in _varied(pairs):
+                block = f"<source>{ex.src}</source>\n<translation>{ex.tgt}</translation>\n"
+                if used + len(block) > max_example_chars:
+                    break
+                out.append(block)
+                used += len(block)
+        return "\n".join(out).rstrip() + "\n"
 
     def manual_import(self, index: int, response: str) -> tuple[int, list[int]]:
         """Importa la respuesta pegada por el usuario. Devuelve (guardados, faltantes)."""

@@ -142,6 +142,17 @@ MANUAL_ANSWER = """
 Write your whole answer inside ONE single code block (```) so it can be copied exactly. Do not write anything before or after the code block."""
 
 
+# Paquete para Proyectos (claude.ai, proyectos de ChatGPT, Gems de Gemini…): las
+# instrucciones y el conocimiento fijo se suben una vez y cada bloque va liviano.
+PROJECT_NOTE = """
+# How this project works
+Each message in this project contains one block of segments to translate, together with the glossary entries that appear in it, the chapter context and the previous text. Translate every block following all the rules above. The project files contain the complete glossary, the chapter summaries and more passages from the official translations: imitate their choices."""
+
+LIGHT_BLOCK_HEADER = """\
+Translate the segments below into {tgt}, following the instructions, the style guide, the glossary and the reference passages of this project.
+Reminder: answer with exactly one <seg id="N">…</seg> per input segment, keep every <gN>…</gN> and <xN/> tag, keep &amp; &lt; &gt; escaped and apply the glossary exactly."""
+
+
 def strip_code_fences(text: str) -> str:
     """Contenido del bloque de código más largo de una respuesta de chat (o el texto tal cual)."""
     blocks = re.findall(r"```[^\n`]*\n(.*?)```", text or "", re.DOTALL)

@@ -598,6 +598,7 @@ function renderAI(v) {
       current === "anthropic" ? state.info.modelos_claude.map(([id, label]) => h("option", { value: id }, label)) : []);
     put(fields,
       h("div", { class: "help" }, PROVIDER_HELP[current] || ""),
+      current === "manual" && state.summary.proveedor.tipo === "manual" ? packageBox(draw) : null,
       current === "manual" ? null : h("div", { class: "field" }, h("label", {}, "Modelo"),
         h("div", { class: "path" },
           h("input", { id: "ai-model", type: "text", list: "model-list", value: sameKind ? cfg.modelo || "" : "",
@@ -624,7 +625,11 @@ function renderAI(v) {
           const r = await guard(() => rpc("test_provider"));
           if (r) toast(`Conexión correcta con ${r.modelo}. Respuesta: «${r.respuesta}»`);
         } }, "Probar conexión"),
-        h("button", { class: "gold", onclick: async () => { if (await saveAI(current)) toast("Ajustes de IA guardados."); } }, "Guardar")));
+        h("button", { class: "gold", onclick: async () => {
+          if (!(await saveAI(current))) return;
+          toast("Ajustes de IA guardados.");
+          draw();
+        } }, "Guardar")));
   };
   draw();
   put(v,
@@ -633,6 +638,54 @@ function renderAI(v) {
     h("div", { class: "card" }, fields),
     h("div", { class: "card" }, h("strong", {}, "Coste estimado de lo pendiente: "), costText(s.estimacion),
       h("span", { class: "muted small" }, ` (${fmt(s.estimacion.palabras)} palabras)`)));
+}
+
+/* Paquete para Proyectos: instrucciones y conocimiento que se suben una vez a un
+   proyecto del chat, para que cada bloque del modo manual vaya liviano. */
+function packageBox(redraw) {
+  const s = state.summary;
+  const pk = s.paquete;
+  const when = (iso) => (iso || "").replace("T", " a las ");
+  const copyInstructions = async () => {
+    const text = await guard(() => rpc("package_instructions"));
+    if (text && (await copyText(text))) toast("Instrucciones copiadas: pégalas en las instrucciones de tu proyecto.");
+  };
+  const generate = async () => {
+    const r = await guard(() => rpc("project_package"));
+    if (!r) return;
+    s.paquete = r.paquete;
+    redraw();
+    const ok = await modal(h("div", {},
+      h("div", { class: "eyebrow" }, "Paquete para Proyectos"),
+      h("h3", {}, "Paquete listo"),
+      h("p", {}, `Instrucciones: ${fmt(r.caracteres_instrucciones)} caracteres. Archivo de conocimiento: ${fmt(r.caracteres_conocimiento)} caracteres, guardado en:`),
+      h("p", { class: "small", style: "overflow-wrap:anywhere" }, r.ruta),
+      h("p", { class: "muted small" }, "Copia las instrucciones en las instrucciones del proyecto y sube el archivo a sus archivos o conocimiento.")),
+    { ok: "Copiar instrucciones", cancel: "Cerrar" });
+    if (ok) await copyInstructions();
+  };
+  const light = h("input", { type: "checkbox", checked: !!s.bloques_livianos, onchange: async (e) => {
+    const sum = await guard(() => rpc("set_settings", { bloques_livianos: e.target.checked }));
+    if (!sum) { e.target.checked = !e.target.checked; return; }
+    state.summary = sum;
+    toast(e.target.checked ? "Bloques livianos: cada bloque llevará solo el capítulo." : "Bloques completos: cada bloque lleva todo el contexto.");
+  } });
+  return h("div", { class: "card sunk stack", style: "margin-bottom:0" },
+    h("div", { class: "eyebrow", style: "margin:0" }, "Opcional · para chats con proyectos"),
+    h("h3", { style: "margin:2px 0 0" }, "Paquete para Proyectos"),
+    h("p", { class: "small", style: "margin-bottom:0" }, "Si tu chat tiene proyectos (los Proyectos de claude.ai, los proyectos de ChatGPT o las Gems de Gemini), sube una sola vez las instrucciones y el material de referencia. Así cada bloque va liviano: solo el capítulo, sin repetir la guía de estilo, el glosario completo ni los ejemplos."),
+    h("ol", { class: "small", style: "margin-bottom:0;padding-left:1.2em;line-height:1.6" },
+      h("li", {}, "Pulsa «Generar paquete»."),
+      h("li", {}, "En tu chat, crea un proyecto: pega las instrucciones en las instrucciones del proyecto y sube el archivo de conocimiento a sus archivos."),
+      h("li", {}, "Marca «Usar bloques livianos» y traduce en chats abiertos dentro de ese proyecto.")),
+    h("div", { class: "row" },
+      h("button", { onclick: generate }, pk ? "Volver a generar" : "Generar paquete"),
+      pk ? h("button", { class: "ghost", onclick: copyInstructions }, "Copiar instrucciones") : null,
+      pk ? h("button", { class: "ghost", onclick: () => rpc("open_folder", pk.ruta) }, "Abrir carpeta del archivo") : null),
+    pk ? (pk.desactualizado
+      ? h("div", { class: "warn small" }, `La guía de estilo, el glosario o el análisis cambiaron desde que generaste el paquete (${when(pk.fecha)}). Vuelve a generarlo y reemplázalo en tu proyecto.`)
+      : h("div", { class: "muted small" }, `Paquete generado el ${when(pk.fecha)}.`)) : null,
+    h("label", { class: "row", style: "margin:14px 0 0;gap:8px;font-weight:600" }, light, "Usar bloques livianos (ya subí el paquete a un proyecto)"));
 }
 
 async function saveAI(kind, quiet = false) {
@@ -1459,6 +1512,9 @@ function manualPanel(index) {
   const panel = h("div", { id: "manual-panel", class: "card manual stack", hidden: state.summary.proveedor.tipo !== "manual" },
     h("div", { class: "eyebrow", style: "margin:0" }, "Modo manual"),
     h("h3", { style: "margin-top:0" }, "Traduce con cualquier chat de IA"),
+    state.summary.bloques_livianos ? h("div", { class: (state.summary.paquete && state.summary.paquete.desactualizado) ? "warn small" : "note small" },
+      "Bloques livianos: pega cada bloque en un chat abierto dentro del proyecto donde subiste el paquete."
+      + (state.summary.paquete && state.summary.paquete.desactualizado ? " El paquete está desactualizado: vuelve a generarlo en «Inteligencia artificial»." : "")) : null,
     h("div", { class: "row" }, counter, h("div", { class: "spacer" }),
       h("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, h("label", { style: "margin:0" }, "Chat"), chatSel),
       h("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, h("label", { style: "margin:0" }, "Bloque"), sizeSel)),
