@@ -51,6 +51,24 @@ La app usa el componente WebView2 de Microsoft Edge, incluido en Windows 10 y
    quieras traducir (créditos, publicidad…).
 6. **Exportar**: genera el EPUB traducido o una edición bilingüe.
 
+## Convertir PDF a EPUB
+
+En la pantalla de inicio, la tarjeta **«Convertir PDF a EPUB»** transforma un
+PDF propio (con texto seleccionable, no escaneado) en un EPUB reflowable listo
+para el lector electrónico o para crear un proyecto de traducción:
+
+- Quita encabezados repetidos, números de página e índices impresos.
+- Reconstruye los párrafos y une las palabras cortadas con guion, también
+  entre páginas.
+- Detecta capítulos y subtítulos (y arma el índice del EPUB), cursivas,
+  negritas, citas sangradas y separadores.
+- Convierte las notas al pie en notas emergentes del EPUB.
+- Usa la primera página como portada y toma título y autor del PDF.
+
+Funciona mejor con PDF de imprenta de una sola columna. Los PDF escaneados
+necesitan OCR (todavía no incluido). Desde la línea de comandos:
+`traductor pdf2epub libro.pdf [--salida libro.epub]`.
+
 ## IA compatibles
 
 Cada persona usa su propia IA:
@@ -105,6 +123,7 @@ Estructura del código (`src/traductor/`):
 | `providers/` | Adaptadores de Claude, OpenAI-compatibles y Ollama. |
 | `project.py` | Carpeta de proyecto y su estado. |
 | `app/` | App de escritorio: API, servidor local y la interfaz (`ui/`). |
+| `pdf2epub.py` | Conversión de PDF con texto a EPUB 3 (párrafos, capítulos, notas, portada). |
 | `cli.py` | Línea de comandos. |
 
 El instalador se construye en GitHub Actions (`.github/workflows/build.yml`)

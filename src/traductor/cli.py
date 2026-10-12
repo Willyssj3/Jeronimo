@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import knowledge
 from .epub import EpubError
+from .pdf2epub import PdfError
 from .project import Project
 from .providers import KINDS, ProviderError, make_provider
 from .translate import Translator
@@ -155,6 +156,21 @@ def cmd_exportar(a) -> None:
             print(f"  {w}")
 
 
+def cmd_pdf2epub(a) -> None:
+    from .pdf2epub import convert
+
+    out, report = convert(a.pdf, a.salida, title=a.titulo, author=a.autor, language=a.idioma,
+                          progress=lambda f, msg=None: _progress_bar("Convirtiendo")(f))
+    print(f"EPUB generado: {out}")
+    print(f"«{report.title}» · {report.author or 'autor desconocido'} · idioma {report.language}")
+    print(f"{report.pages} páginas · {report.chapters} capítulos · {report.notes} notas · "
+          f"{report.removed_lines} encabezados/números de página quitados")
+    if report.dropped_pages:
+        print(f"Páginas omitidas (índice impreso): {report.dropped_pages}")
+    for w in report.warnings:
+        print(f"Aviso: {w}")
+
+
 def cmd_prompt(a) -> None:
     project = Project(a.carpeta)
     tr = Translator(project, None)
@@ -242,6 +258,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--salida")
     s.set_defaults(func=cmd_exportar)
 
+    s = sub.add_parser("pdf2epub", help="convierte un PDF propio (con texto) en EPUB")
+    s.add_argument("pdf")
+    s.add_argument("--salida")
+    s.add_argument("--titulo")
+    s.add_argument("--autor")
+    s.add_argument("--idioma")
+    s.set_defaults(func=cmd_pdf2epub)
+
     s = sub.add_parser("prompt", help="modo manual: prompt del siguiente bloque para pegar en un chat")
     s.add_argument("carpeta")
     s.add_argument("--capitulo", type=int, required=True)
@@ -260,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         args.func(args)
-    except (ProviderError, EpubError, ValueError, FileNotFoundError, FileExistsError, KeyError) as e:
+    except (ProviderError, EpubError, PdfError, ValueError, FileNotFoundError, FileExistsError, KeyError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

@@ -1,8 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Construcción con PyInstaller: pyinstaller --noconfirm packaging/TraductorDeLibros.spec
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
-datas = collect_data_files("traductor", includes=["app/ui/*"])
+datas = (
+    collect_data_files("traductor", includes=["app/ui/*"])
+    + collect_data_files("pdfminer")
+    + collect_data_files("pypdfium2_raw")
+    + collect_data_files("pypdfium2")
+)
+binaries = collect_dynamic_libs("pypdfium2_raw")
 hiddenimports = (
     collect_submodules("traductor")
     + collect_submodules("keyring.backends")
@@ -12,6 +18,7 @@ hiddenimports = (
 a = Analysis(
     ["lanzador.py"],
     pathex=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=["tkinter", "pytest"],

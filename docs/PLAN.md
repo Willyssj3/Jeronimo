@@ -88,5 +88,6 @@ el coste estimado.
    - Pasada de revisión por una segunda IA (consistencia y glosario).
    - Preparación del conocimiento en modo manual (copiar/pegar).
    - Traducción del texto alternativo de imágenes.
-   - Más formatos de entrada (DOCX, TXT) y salida (DOCX, PDF).
+   - ✅ Conversión de PDF con texto a EPUB (`pdf2epub.py`).
+   - OCR para PDF escaneados; más formatos de entrada (DOCX, TXT) y salida (DOCX, PDF).
    - Interfaz en inglés.

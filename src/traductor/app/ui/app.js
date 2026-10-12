@@ -202,6 +202,7 @@ async function pollTask() {
       if (state.taskPending) {
         // La tarea pudo terminar antes de la primera consulta: igual se refresca.
         state.taskPending = false;
+        state.lastTask = t;
         if (t.error) toast(t.error, true);
         else toast(`${t.nombre}: terminada.`);
         await refreshSummary();
@@ -360,7 +361,35 @@ function renderHome(v) {
               if (s) await opened(s);
             } }, "Abrir") : h("span", { class: "badge" }, "no encontrado"))))
           : h("p", { class: "muted" }, "Todavía no hay proyectos."))),
+    pdfCard(),
     h("p", { class: "muted small" }, `Versión ${info.version} · modo ${info.modo}. Usa solo libros que tengas derecho a traducir.`));
+}
+
+function pdfCard() {
+  const last = state.lastTask && state.lastTask.nombre === "Convertir PDF a EPUB" ? state.lastTask : null;
+  const r = last && last.resultado;
+  const busy = state.task && state.task.activa;
+  return h("div", { class: "card stack" },
+    h("h2", { style: "margin-top:0" }, "Convertir PDF a EPUB"),
+    h("p", { class: "muted" }, "Para tus propios PDF con texto seleccionable (no escaneados): quita encabezados y números de página, une las palabras cortadas, detecta capítulos, cursivas y notas al pie, y crea un EPUB listo para tu lector o para traducir."),
+    h("div", { class: "field" }, h("label", {}, "PDF"), pathField("pdf-in", "C:\\Libros\\mi-libro.pdf", "pdf")),
+    h("div", { class: "field" }, h("label", {}, "Guardar EPUB en ", h("span", { class: "hint" }, "(opcional; por defecto, junto al PDF)")),
+      h("input", { id: "pdf-out", type: "text", placeholder: "C:\\Libros\\mi-libro.epub" })),
+    h("div", { class: "row end" }, h("button", { disabled: busy, onclick: () => {
+      const pdf = $("#pdf-in").value.trim();
+      if (!pdf) return toast("Elige el PDF que quieres convertir.", true);
+      startTask(() => rpc("convert_pdf", pdf, $("#pdf-out").value.trim()));
+    } }, "Convertir")),
+    r ? h("div", { class: "card", style: "background:var(--panel-2)" },
+      h("p", { style: "margin-top:0" }, h("strong", {}, "EPUB creado: "), r.ruta),
+      h("p", { class: "small" }, `«${r.titulo}»${r.autor ? " · " + r.autor : ""} · ${r.paginas} páginas · ${r.capitulos} capítulos · ${r.notas} notas · ${r.lineas_quitadas} encabezados o números de página quitados`
+        + (r.paginas_omitidas.length ? ` · índice impreso omitido (pág. ${r.paginas_omitidas.join(", ")})` : "")),
+      r.avisos.map((w) => h("p", { class: "warn small" }, w)),
+      h("p", { class: "muted small" }, "Revísalo en tu lector: si algún encabezado o nota quedó mal, avísanos para mejorar el conversor."),
+      h("div", { class: "row" },
+        h("button", { class: "ghost", onclick: () => rpc("open_folder", r.ruta) }, "Abrir carpeta"),
+        h("button", { class: "ghost", onclick: () => { $("#new-epub").value = r.ruta; $("#new-epub").scrollIntoView({ behavior: "smooth" }); toast("Elige el idioma y pulsa «Crear proyecto» para traducirlo."); } }, "Usarlo para un proyecto de traducción")))
+      : null);
 }
 
 async function opened(summary) {

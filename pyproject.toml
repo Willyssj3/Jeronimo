@@ -14,11 +14,12 @@ dependencies = [
     "lxml>=5.0",
     "anthropic>=1.13",
     "openai>=1.40",
+    "pdfplumber>=0.11",
 ]
 
 [project.optional-dependencies]
 escritorio = ["pywebview>=5.0", "keyring>=24"]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "reportlab>=4"]
 
 [project.scripts]
 traductor = "traductor.cli:main"

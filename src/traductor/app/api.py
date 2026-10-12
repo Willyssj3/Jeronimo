@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .. import __version__, inline, knowledge
 from ..epub import EpubBook, EpubError
+from ..pdf2epub import PdfError
 from ..inline import localname
 from ..project import Project, read_json, slugify, write_json
 from ..prompts import LANG_NAMES, VARIANTS
@@ -58,7 +59,7 @@ class TaskRunner:
             self.state["mensaje"] = "Detenida." if self._cancel.is_set() else "Terminada."
             if not self._cancel.is_set():
                 self.state["progreso"] = 1.0
-        except (ProviderError, EpubError, ValueError, KeyError, FileNotFoundError) as e:
+        except (ProviderError, EpubError, PdfError, ValueError, KeyError, FileNotFoundError) as e:
             self.state["error"] = str(e)
             self.log(f"Error: {e}")
         except Exception as e:  # pragma: no cover - errores imprevistos
@@ -153,6 +154,9 @@ class Api:
 
         if kind == "carpeta":
             result = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=directory)
+        elif kind == "pdf":
+            result = self._window.create_file_dialog(
+                webview.FileDialog.OPEN, directory=directory, file_types=("Documentos PDF (*.pdf)", "Todos (*.*)"))
         else:
             result = self._window.create_file_dialog(
                 webview.FileDialog.OPEN, directory=directory, file_types=("Libros EPUB (*.epub)", "Todos (*.*)"))
@@ -183,6 +187,32 @@ class Api:
             return True
         except OSError:
             return False
+
+    # -- PDF a EPUB -------------------------------------------------------------
+
+    def convert_pdf(self, pdf_path: str, out_path: str = "") -> dict:
+        """Convierte un PDF propio en EPUB (en segundo plano)."""
+        from ..pdf2epub import convert
+
+        pdf = Path(pdf_path.strip().strip('"'))
+        if not pdf.is_file():
+            raise FileNotFoundError(f"No encuentro el archivo «{pdf}».")
+        out = Path(out_path.strip().strip('"')) if out_path and out_path.strip() else pdf.with_suffix(".epub")
+
+        def run(task: TaskRunner):
+            task.log(f"Convirtiendo «{pdf.name}»…")
+            path, report = convert(pdf, out, progress=task.progress)
+            task.log(f"Listo: {report.chapters} capítulos, {report.notes} notas, "
+                     f"{report.removed_lines} encabezados o números de página quitados.")
+            for w in report.warnings:
+                task.log(f"Aviso: {w}")
+            return {"ruta": str(path), "paginas": report.pages, "capitulos": report.chapters,
+                    "notas": report.notes, "lineas_quitadas": report.removed_lines,
+                    "paginas_omitidas": report.dropped_pages, "avisos": report.warnings,
+                    "titulo": report.title, "autor": report.author, "idioma": report.language}
+
+        self._tasks.start("Convertir PDF a EPUB", run)
+        return self.task_status()
 
     # -- proyectos -----------------------------------------------------------
 
@@ -602,7 +632,7 @@ class Bridge:
             return {"ok": False, "error": f"Función desconocida: {name}"}
         try:
             return {"ok": True, "resultado": getattr(self._api, name)(*(args or []))}
-        except (ProviderError, EpubError, ValueError, KeyError, FileNotFoundError, FileExistsError) as e:
+        except (ProviderError, EpubError, PdfError, ValueError, KeyError, FileNotFoundError, FileExistsError) as e:
             return {"ok": False, "error": str(e)}
         except Exception as e:  # pragma: no cover
             _log_error(traceback.format_exc())
