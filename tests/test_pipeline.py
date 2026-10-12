@@ -155,14 +155,24 @@ def test_refusal_isolates_one_paragraph(project):
 
 def test_manual_mode(project):
     tr = Translator(project, None)
-    prompt, ids = tr.manual_prompt(0)
-    assert "<seg id=\"0\">The Harbor</seg>" in prompt and ids == [0, 1, 2, 3]
-    saved, missing = tr.manual_import(0, '<seg id="0">El puerto</seg>\n<seg id="3">Ella asintió.</seg>')
+    prompt, ids, blocks = tr.manual_prompt(0)
+    assert "<seg id=\"0\">The Harbor</seg>" in prompt and ids == [0, 1, 2, 3] and blocks == 1
+    assert "ONE single code block" in prompt  # salida fácil de copiar desde el chat
+    # La respuesta pegada desde un chat suele venir dentro de un bloque de código.
+    reply = '```xml\n<seg id="0">El puerto</seg>\n<seg id="3">Ella asintió.</seg>\n```'
+    saved, missing = tr.manual_import(0, reply)
     assert saved == 2 and missing == []
     data = project.load_chapter(0)
     assert data["segmentos"][0]["tgt"] == "El puerto"
-    _prompt, ids = tr.manual_prompt(0)
+    _prompt, ids, _blocks = tr.manual_prompt(0)
     assert ids == [1, 2]
+
+
+def test_manual_block_size(project):
+    tr = Translator(project, None)
+    *_rest, blocks_small = tr.manual_prompt(0, block_chars=60)
+    *_rest, blocks_big = tr.manual_prompt(0, block_chars=20000)
+    assert blocks_small > blocks_big == 1
 
 
 def test_cannot_approve_incomplete_chapter(project):

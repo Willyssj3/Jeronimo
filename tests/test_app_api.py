@@ -67,10 +67,16 @@ def test_project_flow(api, tmp_path):
 
 def test_manual_mode(api):
     api.set_provider({"tipo": "manual"})
+    assert api.project_summary()["bloque_manual"] == 15000
     prompt = api.manual_prompt(0)
     assert prompt["ids"] == [0, 1, 2, 3] and "<seg id=\"0\">" in prompt["texto"]
+    assert prompt["bloques_restantes"] == 1
     r = api.manual_import(0, '<seg id="0">El puerto</seg>')
-    assert r == {"guardados": 1, "faltan": []}
+    assert r == {"guardados": 1, "faltan": [], "bloques_restantes": 1, "parrafos_pendientes": 3}
+    api.set_settings({"bloque_manual": 6000})
+    assert api.manual_status(0)["bloque"] == 6000
+    with pytest.raises(ValueError):
+        api.set_settings({"bloque_manual": 10})
     with pytest.raises(ValueError):
         api.manual_import(0, "respuesta sin marcas")
     with pytest.raises(ValueError, match="modo manual"):

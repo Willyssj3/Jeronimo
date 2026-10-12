@@ -79,7 +79,7 @@ Cada persona usa su propia IA:
 | **Google Gemini** | Tiene nivel gratuito | Clave gratis en Google AI Studio, con límites de uso. |
 | **OpenAI**, **OpenRouter**, **DeepSeek** | Pago por uso | Cualquier servicio compatible con la API de OpenAI. |
 | **Ollama**, **LM Studio** | Gratis | Modelos que funcionan en tu propio PC (calidad menor; requiere buena tarjeta gráfica). |
-| **Modo manual** | — | La app copia cada bloque con sus instrucciones para pegarlo en el chat de tu IA; luego pegas la respuesta. |
+| **Modo manual** | Incluido en tu plan | Usa tu plan de claude.ai (Pro/Max) u otro chat: la app copia cada bloque con sus instrucciones, lo pegas en el chat y luego pegas la respuesta. Bloques de 6.000 a 25.000 caracteres y botón «Importar y copiar el siguiente» para ir rápido. |
 
 ## Línea de comandos
 

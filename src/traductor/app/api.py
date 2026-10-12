@@ -25,7 +25,7 @@ from ..prompts import LANG_NAMES, VARIANTS
 from ..providers import KINDS, ProviderError, config_dir, get_api_key, make_provider, save_api_key
 from ..providers.anthropic_provider import PRICES, SUGGESTED_MODELS, estimate_cost
 from ..providers.base import Usage
-from ..translate import Options, Translator, pseudo_slots
+from ..translate import DEFAULT_MANUAL_BLOCK, Options, Translator, pseudo_slots
 
 LOCAL_KINDS = {"ollama", "lmstudio", "manual"}
 
@@ -258,6 +258,11 @@ class Api:
         for key in ("nombre", "variante", "titulo_traducido", "revision", "idioma_destino"):
             if key in values:
                 p.config[key] = values[key]
+        if "bloque_manual" in values:
+            size = int(values["bloque_manual"])
+            if not 1000 <= size <= 60000:
+                raise ValueError("El tamaño de bloque debe estar entre 1.000 y 60.000 caracteres.")
+            p.config.setdefault("opciones", {})["bloque_manual"] = size
         p.save_config()
         return self.project_summary()
 
@@ -281,6 +286,7 @@ class Api:
             "variante": cfg.get("variante"),
             "titulo_traducido": cfg.get("titulo_traducido", ""),
             "revision": cfg.get("revision", "capitulo"),
+            "bloque_manual": (cfg.get("opciones") or {}).get("bloque_manual") or DEFAULT_MANUAL_BLOCK,
             "proveedor": prov,
             "tiene_clave": kind in LOCAL_KINDS or bool(get_api_key(kind)),
             "capitulos": [asdict(c) for c in chapters],
@@ -550,21 +556,32 @@ class Api:
         self._tasks.start("Traducción", run)
         return self.task_status()
 
+    def _manual_state(self, translator: Translator, index: int) -> dict:
+        data = self._need_project().load_chapter(index)
+        return {"bloques_restantes": len(translator.manual_chunks(data)),
+                "parrafos_pendientes": sum(1 for s in data["segmentos"] if not s.get("tgt"))}
+
+    def manual_status(self, index: int) -> dict:
+        translator = Translator(self._need_project(), None)
+        return dict(self._manual_state(translator, index), bloque=translator.manual_block_chars())
+
     def manual_prompt(self, index: int) -> dict | None:
         self._check_not_busy(index)
-        res = Translator(self._need_project(), None).manual_prompt(index)
+        translator = Translator(self._need_project(), None)
+        res = translator.manual_prompt(index)
         if res is None:
             return None
-        text, ids = res
-        return {"texto": text, "ids": ids, "caracteres": len(text)}
+        text, ids, blocks = res
+        return {"texto": text, "ids": ids, "caracteres": len(text), "bloques_restantes": blocks}
 
     def manual_import(self, index: int, text: str) -> dict:
         self._check_not_busy(index)
-        saved, missing = Translator(self._need_project(), None).manual_import(index, text)
+        translator = Translator(self._need_project(), None)
+        saved, missing = translator.manual_import(index, text)
         if saved == 0:
-            raise ValueError("No encontré párrafos traducidos en lo que pegaste. Copia la respuesta completa, "
-                             "con las marcas <seg id=\"…\">.")
-        return {"guardados": saved, "faltan": missing}
+            raise ValueError("No encontré párrafos traducidos en lo que pegaste. Copia la respuesta completa "
+                             "(en claude.ai, con el botón «Copiar» del bloque de código).")
+        return dict({"guardados": saved, "faltan": missing}, **self._manual_state(translator, index))
 
     # -- exportación -----------------------------------------------------------
 

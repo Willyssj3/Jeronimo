@@ -121,6 +121,14 @@ def translate_user(*, segments: list[tuple[int, str]], glossary: list[dict],
     return "\n\n".join(parts)
 
 
+# En el modo manual la respuesta se copia desde un chat: dentro de un bloque de
+# código se conserva tal cual y el chat ofrece un botón para copiarla entera.
+MANUAL_OUTPUT = """
+
+# Output format
+Write your whole answer inside ONE single code block (```), containing only the <seg> elements and, if needed, the <notes> block. Do not write anything before or after the code block."""
+
+
 _SEG_RE = re.compile(r'<seg\s+id\s*=\s*["\']?(\d+)["\']?\s*>(.*?)</seg\s*>', re.DOTALL | re.IGNORECASE)
 _NOTE_RE = re.compile(r'<note\s+id\s*=\s*["\']?(\d+)["\']?\s*>(.*?)</note\s*>', re.DOTALL | re.IGNORECASE)
 _NL_RE = re.compile(r"\s*\n\s*")

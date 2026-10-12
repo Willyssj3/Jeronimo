@@ -21,6 +21,11 @@ from .project import Project
 from .providers import Provider, RateLimitError, RefusalError
 
 
+# Caracteres del original por bloque en el modo manual (copiar y pegar en un chat).
+MANUAL_BLOCKS = {"normal": 6000, "grande": 15000, "muy-grande": 25000}
+DEFAULT_MANUAL_BLOCK = MANUAL_BLOCKS["grande"]
+
+
 @dataclass
 class Options:
     chunk_chars: int = 6000      # tamaño de cada bloque (caracteres del original)
@@ -246,15 +251,28 @@ class Translator:
 
     # -- modo manual (copiar y pegar) -----------------------------------------
 
-    def manual_prompt(self, index: int) -> tuple[str, list[int]] | None:
-        """Prompt completo del siguiente bloque pendiente, para pegarlo en un chat."""
+    def manual_block_chars(self) -> int:
+        size = (self.project.config.get("opciones") or {}).get("bloque_manual")
+        return int(size) if size else DEFAULT_MANUAL_BLOCK
+
+    def manual_chunks(self, data: dict, block_chars: int | None = None) -> list[list[dict]]:
+        saved = self.options.chunk_chars
+        self.options.chunk_chars = block_chars or self.manual_block_chars()
+        try:
+            return self.pending_chunks(data)
+        finally:
+            self.options.chunk_chars = saved
+
+    def manual_prompt(self, index: int, block_chars: int | None = None) -> tuple[str, list[int], int] | None:
+        """Prompt completo del siguiente bloque pendiente, para pegarlo en un chat.
+        Devuelve (texto, párrafos del bloque, bloques pendientes en el capítulo)."""
         data = self.project.load_chapter(index)
-        chunks = self.pending_chunks(data)
+        chunks = self.manual_chunks(data, block_chars)
         if not chunks:
             return None
         chunk = chunks[0]
-        text = self.system + "\n\n" + self.build_user(data, chunk)
-        return text, [s["n"] for s in chunk]
+        text = self.system + "\n\n" + self.build_user(data, chunk) + prompts.MANUAL_OUTPUT
+        return text, [s["n"] for s in chunk], len(chunks)
 
     def manual_import(self, index: int, response: str) -> tuple[int, list[int]]:
         """Importa la respuesta pegada por el usuario. Devuelve (guardados, faltantes)."""

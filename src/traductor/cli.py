@@ -178,10 +178,11 @@ def cmd_prompt(a) -> None:
     if res is None:
         print("Ese capítulo ya está traducido.", file=sys.stderr)
         return
-    text, ids = res
+    text, ids, blocks = res
     if a.salida:
         Path(a.salida).write_text(text, encoding="utf-8")
-        print(f"Prompt guardado en {a.salida} (párrafos {ids[0]}–{ids[-1]}).", file=sys.stderr)
+        print(f"Prompt guardado en {a.salida} (párrafos {ids[0]}–{ids[-1]}; "
+              f"bloques pendientes en el capítulo: {blocks}).", file=sys.stderr)
     else:
         print(text)
 

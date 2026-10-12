@@ -668,14 +668,21 @@ function renderChapters(v) {
   const s = state.summary;
   const chapters = s.capitulos.filter((c) => c.total > 0);
   const busy = state.task && state.task.activa;
+  const manual = s.proveedor.tipo === "manual";
   v.append(
     h("h1", {}, "Capítulos"),
-    h("p", { class: "lead" }, s.revision === "capitulo"
-      ? "Traduce de a un capítulo, revísalo y apruébalo: lo aprobado sirve de ejemplo para los siguientes."
-      : "Puedes traducir todo de corrido y revisar al final."),
+    h("p", { class: "lead" }, manual
+      ? "Modo manual: en cada capítulo copias los bloques a tu chat de claude.ai y pegas las respuestas. Lo aprobado sirve de ejemplo para los siguientes."
+      : s.revision === "capitulo"
+        ? "Traduce de a un capítulo, revísalo y apruébalo: lo aprobado sirve de ejemplo para los siguientes."
+        : "Puedes traducir todo de corrido y revisar al final."),
     h("div", { class: "row" },
-      h("button", { disabled: busy, onclick: () => startTask(() => rpc("translate", "siguiente", null)) }, "Traducir el siguiente capítulo"),
-      h("button", { class: "ghost", disabled: busy, onclick: async () => {
+      manual ? h("button", { onclick: () => {
+        const next = chapters.find((c) => c.status !== "omitido" && c.done < c.total);
+        if (next) go("revision", next.index); else toast("No quedan capítulos pendientes.");
+      } }, "Continuar en modo manual") : null,
+      manual ? null : h("button", { disabled: busy, onclick: () => startTask(() => rpc("translate", "siguiente", null)) }, "Traducir el siguiente capítulo"),
+      manual ? null : h("button", { class: "ghost", disabled: busy, onclick: async () => {
         const est = s.estimacion;
         const ok = await modal(h("div", {}, h("h3", {}, "Traducir todo lo pendiente"),
           h("p", {}, `Se traducirán ${fmt(est.palabras)} palabras en unas ${fmt(est.llamadas)} peticiones. Coste estimado: ${costText(est)}.`),
@@ -693,7 +700,7 @@ function renderChapters(v) {
           h("td", { style: "width:180px" }, h("div", { class: "row" }, h("div", { class: "progress" }, h("div", { style: `width:${pct(c.done, c.total)}%` })), h("span", { class: "small muted" }, `${c.done}/${c.total}`))),
           h("td", { class: "row", style: "justify-content:flex-end" },
             h("button", { class: "small ghost", onclick: () => go("revision", c.index) }, "Revisar"),
-            c.status !== "omitido" && c.done < c.total ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", c.index)) }, "Traducir") : null,
+            c.status !== "omitido" && c.done < c.total && !manual ? h("button", { class: "small", disabled: busy, onclick: () => startTask(() => rpc("translate", "capitulo", c.index)) }, "Traducir") : null,
             h("button", { class: "small ghost", title: "No traducir este documento (créditos, publicidad…)", onclick: async () => {
               const sum = await guard(() => rpc("set_skipped", c.index, c.status !== "omitido"));
               if (sum) { state.summary = sum; render(); }
@@ -823,36 +830,69 @@ function segmentRow(data, s) {
 
 function manualPanel(index) {
   const out = h("textarea", { placeholder: "Pega aquí la respuesta completa de la IA (con las marcas <seg id=\"…\">)." });
-  const info = h("p", { class: "muted small" });
-  return h("div", { id: "manual-panel", class: "card manual stack", hidden: state.summary.proveedor.tipo !== "manual" },
-    h("h3", { style: "margin-top:0" }, "Modo manual (copiar y pegar)"),
-    h("ol", { class: "small" },
-      h("li", {}, "Pulsa «Copiar bloque»: se copia el siguiente bloque pendiente con todas las instrucciones."),
-      h("li", {}, "Pégalo en el chat de tu IA y espera la respuesta completa."),
-      h("li", {}, "Copia la respuesta, pégala abajo y pulsa «Importar». Repite hasta terminar el capítulo.")),
-    h("div", { class: "row" },
-      h("button", { onclick: async () => {
-        const p = await guard(() => rpc("manual_prompt", index));
-        if (p === undefined) return;
-        if (p === null) return toast("Este capítulo ya está traducido.");
-        if (await copyText(p.texto)) {
-          info.textContent = `Copiado: párrafos ${p.ids[0]}–${p.ids[p.ids.length - 1]} (${fmt(p.caracteres)} caracteres).`;
-          toast("Bloque copiado. Pégalo en el chat de tu IA.");
-        } else {
-          await modal(h("div", {}, h("p", {}, "No se pudo copiar automáticamente. Selecciona y copia este texto:"), h("textarea", { class: "big" }, p.texto)), { ok: "Cerrar", cancel: null });
-        }
-      } }, "Copiar bloque"),
-      info),
+  const info = h("p", { class: "muted small", style: "margin:0" });
+  const counter = h("strong", {}, "…");
+  const sizeSel = h("select", { style: "width:auto", onchange: async (e) => {
+    const sum = await guard(() => rpc("set_settings", { bloque_manual: Number(e.target.value) }));
+    if (sum) { state.summary = sum; refreshCounter(); }
+  } }, [[6000, "Normal (6.000 caracteres)"], [15000, "Grande (15.000, recomendado)"], [25000, "Muy grande (25.000)"]].map(([v, label]) =>
+    h("option", { value: v, selected: (state.summary.bloque_manual || 15000) === v }, label)));
+
+  const refreshCounter = async () => {
+    const st = await guard(() => rpc("manual_status", index));
+    if (!st) return;
+    counter.textContent = st.parrafos_pendientes
+      ? `Quedan ${st.bloques_restantes} bloque(s) · ${st.parrafos_pendientes} párrafos sin traducir en este capítulo`
+      : "Capítulo completo: revísalo y apruébalo.";
+  };
+
+  const copyNext = async () => {
+    const p = await guard(() => rpc("manual_prompt", index));
+    if (p === undefined) return false;
+    if (p === null) {
+      toast("Este capítulo ya está traducido. Revísalo y apruébalo.");
+      return false;
+    }
+    info.textContent = `Bloque copiado: párrafos ${p.ids[0]}–${p.ids[p.ids.length - 1]} (${fmt(p.caracteres)} caracteres).`;
+    if (await copyText(p.texto)) {
+      toast("Bloque copiado. Pégalo en tu chat de claude.ai.");
+    } else {
+      const ta = h("textarea", { class: "big" });
+      ta.value = p.texto;
+      await modal(h("div", {}, h("p", {}, "Pulsa «Copiar» para llevarte el bloque:"), ta), { ok: "Copiar", cancel: "Cerrar" })
+        .then(async (ok) => { if (ok) { ta.select(); await copyText(p.texto); toast("Bloque copiado."); } });
+    }
+    return true;
+  };
+
+  const doImport = async (thenCopy) => {
+    if (!out.value.trim()) return toast("Pega primero la respuesta de la IA.", true);
+    const r = await guard(() => rpc("manual_import", index, out.value));
+    if (!r) return;
+    out.value = "";
+    toast(`Importados ${r.guardados} párrafos.` + (r.faltan.length ? ` Faltaron: ${r.faltan.join(", ")}.` : ""));
+    if (thenCopy && r.parrafos_pendientes) await copyNext();
+    await refreshSummary();
+    const panel = $("#manual-panel");
+    const wasOpen = panel && !panel.hidden;
+    await render();
+    if (wasOpen && $("#manual-panel")) $("#manual-panel").hidden = false;
+  };
+
+  const panel = h("div", { id: "manual-panel", class: "card manual stack", hidden: state.summary.proveedor.tipo !== "manual" },
+    h("h3", { style: "margin-top:0" }, "Modo manual: usa tu plan de claude.ai"),
+    h("div", { class: "row" }, counter, h("div", { class: "spacer" }), h("label", { style: "margin:0" }, "Tamaño del bloque"), sizeSel),
+    h("ol", { class: "small", style: "margin:0;padding-left:1.2em;line-height:1.6" },
+      h("li", {}, "Pulsa «Copiar bloque» y pégalo en un chat de claude.ai (puedes usar el mismo chat para todo el capítulo)."),
+      h("li", {}, "Cuando Claude termine, usa el botón «Copiar» del bloque de código de su respuesta."),
+      h("li", {}, "Pégala aquí y pulsa «Importar y copiar el siguiente»: la app guarda la traducción y ya te deja el próximo bloque copiado.")),
+    h("div", { class: "row" }, h("button", { onclick: copyNext }, "Copiar bloque"), info),
     out,
-    h("div", { class: "row end" }, h("button", { onclick: async () => {
-      if (!out.value.trim()) return toast("Pega primero la respuesta de la IA.", true);
-      const r = await guard(() => rpc("manual_import", index, out.value));
-      if (!r) return;
-      toast(`Importados ${r.guardados} párrafos.` + (r.faltan.length ? ` Faltaron: ${r.faltan.join(", ")}.` : ""));
-      out.value = "";
-      await refreshSummary();
-      render();
-    } }, "Importar respuesta")));
+    h("div", { class: "row end" },
+      h("button", { class: "ghost", onclick: () => doImport(false) }, "Solo importar"),
+      h("button", { onclick: () => doImport(true) }, "Importar y copiar el siguiente")));
+  refreshCounter();
+  return panel;
 }
 
 /* ---------------------------------------------------------------- exportar */
