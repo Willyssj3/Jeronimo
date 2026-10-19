@@ -166,18 +166,44 @@ para compartir (botón de descarga directa `docs/boton-descargar.svg`, capturas 
 hechas con `tools/capturas_readme.py`, preguntas frecuentes); el usuario eligió solo el README, sin
 página web aparte.
 
-Pendiente, en este orden (lo fijó el usuario):
-1. **Versión 0.4.0** (lo eligió el usuario): (a) al crear el proyecto, dar ya las instrucciones para
-   armarlo en el chat de IA que use, con la guía de estilo y el glosario; (b) revisión final del
-   libro completo, que busque errores e incongruencias usando las notas que quedan en cada
-   capítulo; (c) lector de audiolibros: voces neuronales gratis que funcionan en la PC (se
-   descargan una vez, pidiendo permiso; el texto no sale de la PC), voces distintas por personaje
-   (con IA; sin IA, al menos narrador y diálogos) y exportar a MP3.
-2. **Programa firmado** (sin el aviso de Windows SmartScreen): en pausa hasta que el usuario lo
+Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trello por cada parte):
+1. **Versión 0.3.2**: (a) renombrar proyectos ya creados (cambia el nombre que se ve, no la carpeta)
+   y quitarlos de recientes (no borra nada del disco, con «Deshacer»); (b) sugerencias y reporte de
+   errores con un **formulario de Google sin cuenta** (las respuestas le llegan al usuario en una
+   planilla privada; no GitHub): la app abre el formulario ya completado con el tipo, la
+   descripción y, si es un error, datos técnicos opcionales (versión, Windows, último error) sin el
+   nombre de usuario en las rutas y con vista previa; nunca texto de libros. El usuario crea el
+   formulario y pasa el enlace; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
+   Cafecito y PayPal** en la app, el README y `.github/FUNDING.yml`; nunca ventanas que
+   interrumpan ni donaciones dentro de los libros exportados. El usuario crea las cuentas y pasa
+   los enlaces.
+2. **Versión 0.4.0**: (a) al crear el proyecto, dar ya las instrucciones para armarlo en el chat de
+   IA que use, con la guía de estilo y el glosario; (b) revisión final del libro completo, que
+   busque errores e incongruencias usando las notas que quedan en cada capítulo; (c) lector de
+   audiolibros: voces neuronales gratis que funcionan en la PC (se descargan una vez, pidiendo
+   permiso; el texto no sale de la PC), voces distintas por personaje (con IA; sin IA, al menos
+   narrador y diálogos) y exportar a MP3.
+3. **Versión 0.5.0**: (a) **IA gratis en la PC**: un modelo abierto ya entrenado (no se entrena uno
+   desde cero), que se descarga con un clic y permiso, corre dentro de la app sin instalar nada
+   aparte y se elige según la memoria y la placa de video (la PC del usuario tiene 4 GB de video);
+   sirve para traducir, revisar y corregir, con la guía, el glosario y los ejemplos de siempre;
+   (b) **diccionario del perfil** (palabras que no se marcan, traducciones aprendidas de las
+   correcciones, viaja con el perfil de autor) y **filtro de falsos positivos** del control de
+   calidad con IA, aprendiendo también de lo que el usuario ignora.
+4. **Versión 0.6.0**: digitalizar libros en papel con fotos o escaneos: enderezar y recortar
+   páginas, separar texto e ilustraciones, unir palabras cortadas, capítulos y notas, OCR de
+   Windows o IA que lee imágenes. Segunda parte: fotos desde el celular con un código QR.
+5. **Versiones 0.7.0 y 0.8.0**: mangas y cómics. Parte 1: abrir CBZ/CBR/PDF/EPUB, detectar globos,
+   leer y traducir, escribir la traducción en globos lisos con fuentes libres de estilo cómic, y
+   exportar CBZ y EPUB de página fija (reusa lo de la 0.6.0). Parte 2: texto sobre el dibujo y
+   onomatopeyas, manga japonés (vertical, de derecha a izquierda) y ajustes por e-reader, Kindle
+   incluido. Elegir piezas con licencias compatibles con MIT (varias herramientas conocidas de
+   este tema son GPL).
+6. **Programa firmado** (sin el aviso de Windows SmartScreen): en pausa hasta que el usuario lo
    pida. Plan: el usuario solicita el certificado gratuito para proyectos de código abierto de
    SignPath Foundation (verificar los requisitos actuales en signpath.org); después se agrega un
    paso de firma al flujo de GitHub con los secretos que den. Explicarle los pasos de forma simple.
-3. **Proponer mejoras** con opciones para elegir. Ideas ya anotadas: los títulos que agrega el
+7. **Proponer mejoras** con opciones para elegir. Ideas ya anotadas: los títulos que agrega el
    conversor de PDF a EPUB («Notas», «Índice», «Portada») salen en español aunque el libro esté en
    otro idioma; las reglas de rayas de diálogo y signos de apertura del control de calidad son
    solo para español, pero el libro se puede traducir a otros idiomas (`LANG_NAMES` en `prompts.py`).

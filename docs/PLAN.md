@@ -98,6 +98,14 @@ el coste estimado.
    - ✅ Interfaz en inglés y portugués.
    - ✅ Corregir los avisos del control de calidad con un clic: lo mecánico al instante y con
      deshacer, lo demás con una propuesta de la IA (`qa_fix.py`, versión 0.3.1).
-   - Para la 0.4.0 (elegido por el usuario): instrucciones para preparar el proyecto en la IA
-     apenas se crea; revisión final del libro completo con las notas de cada capítulo; lector de
-     audiolibros con voces locales gratuitas, una voz por personaje y exportación a MP3.
+   - Próximas versiones (en el orden que eligió el usuario el 19/10/2026):
+     - 0.3.2: renombrar proyectos y quitarlos de recientes; sugerencias y errores con un formulario
+       sin cuenta; «Apoyar el proyecto» (GitHub Sponsors, Cafecito y PayPal).
+     - 0.4.0: instrucciones para preparar el proyecto en la IA apenas se crea; revisión final del
+       libro completo con las notas de cada capítulo; lector de audiolibros con voces locales
+       gratuitas, una voz por personaje y exportación a MP3.
+     - 0.5.0: IA gratis que funciona en la PC (modelo abierto ya entrenado); diccionario del perfil
+       y filtro de falsos positivos del control de calidad.
+     - 0.6.0: digitalizar libros en papel con fotos o escaneos.
+     - 0.7.0 y 0.8.0: mangas y cómics (globos y exportación; después texto sobre el dibujo, manga
+       japonés y ajustes por e-reader).
