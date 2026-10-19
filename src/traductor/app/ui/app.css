@@ -447,6 +447,14 @@ details > summary::marker { color: var(--gold); }
 .recent { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .recent:last-child { border-bottom: none; }
 .recent strong { font-family: var(--serif); font-size: 1.1rem; font-weight: 600; color: var(--heading); }
+.recent.removed { padding: 10px 12px; margin: 4px 0; border: 1px dashed var(--border-strong); border-radius: 8px; }
+button.recent-x {
+  padding: 2px 8px; border: none; border-radius: 6px; background: none; color: var(--muted);
+  font-size: 1.25rem; line-height: 1; font-weight: 400;
+}
+button.recent-x:hover:not(:disabled) { background: var(--gold-wash); color: var(--heading); }
+.title-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+.title-row h1 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .result { background: var(--gold-wash); border: 1px solid var(--gold-line); border-radius: var(--radius-sm); padding: 14px 16px; }
 .result > p:first-child { margin-top: 0; }
 

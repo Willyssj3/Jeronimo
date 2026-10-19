@@ -168,3 +168,45 @@ def test_manual_chat_model_and_plan(api):
 
     est = api.manual_book_estimate()
     assert est["bloques"] >= 2 and est["parrafos"] > 0 and est["bloque"] == 6000
+
+
+def test_rename_project_and_recent_list(api, tmp_path):
+    folder = str(tmp_path / "proyecto")
+    s = api.rename_project("  Mi   traducción  ")
+    assert s["nombre"] == "Mi traducción" and s["titulo"] == "A Test Book"  # el título del libro no cambia
+    assert api.app_info()["recientes"][0] == {"carpeta": folder, "nombre": "Mi traducción", "existe": True}
+    with pytest.raises(ValueError):
+        api.rename_project("   ")
+    with pytest.raises(ValueError):
+        api.rename_project("x" * 121)
+
+    # Un segundo proyecto queda primero; quitar el primero no borra nada y «Deshacer» lo devuelve a su lugar.
+    api.create_project(str(tmp_path / "book.epub"), str(tmp_path / "otro"))
+    assert [r["carpeta"] for r in api.app_info()["recientes"]] == [str(tmp_path / "otro"), folder]
+    res = api.remove_recent(folder)
+    assert res["posicion"] == 1 and res["quitado"]["nombre"] == "Mi traducción"
+    assert [r["carpeta"] for r in res["recientes"]] == [str(tmp_path / "otro")]
+    assert (tmp_path / "proyecto" / "proyecto.json").exists()
+    assert [r["carpeta"] for r in api.restore_recent(res["quitado"], res["posicion"])] == [str(tmp_path / "otro"), folder]
+    with pytest.raises(ValueError):
+        api.remove_recent(str(tmp_path / "no-existe"))
+
+    # Abrir un proyecto quitado lo vuelve a poner primero, con su nombre nuevo.
+    api.remove_recent(folder)
+    api.open_project(folder)
+    assert api.app_info()["recientes"][0]["nombre"] == "Mi traducción"
+
+
+def test_update_check_does_not_overwrite_other_settings(api, monkeypatch):
+    """La consulta de versión nueva tarda; lo que otra llamada guarda mientras tanto no se pierde."""
+    from traductor import updates
+
+    def slow_latest(*_a, **_k):
+        api.rename_project("Cambiado mientras se consultaba")  # otra llamada que guarda ajustes en el medio
+        return {"version": "0.0.1", "url": "", "notas": "", "fecha": "", "descarga": "", "tamano": 0, "sha256": ""}
+
+    monkeypatch.setattr(updates, "latest_release", slow_latest)
+    assert api.check_update(force=True) is None
+    info = api.app_info()
+    assert info["recientes"][0]["nombre"] == "Cambiado mientras se consultaba"
+    assert api._settings()["actualizacion"]["ultima"]["version"] == "0.0.1"

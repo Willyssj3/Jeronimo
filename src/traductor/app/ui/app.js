@@ -417,7 +417,7 @@ function setChrome() {
   $("#btn-quit").hidden = !(state.info && state.info.modo === "navegador");
   $("#sidebar").hidden = !open;
   $("#btn-close-project").hidden = !open;
-  $("#project-name").textContent = open ? state.summary.titulo || state.summary.nombre : "";
+  $("#project-name").textContent = open ? state.summary.nombre || state.summary.titulo : "";
   if (open) {
     const prog = state.summary.progreso;
     $("#side-pct").textContent = t("{n} %", { n: pct(prog.hechos, prog.total) });
@@ -536,17 +536,47 @@ function renderHome(v) {
           },
         }, t("Abrir"))),
         h("h3", {}, t("Recientes")),
-        info.recientes.length
-          ? h("div", {}, info.recientes.map((r) => h("div", { class: "recent" },
-            h("div", { style: "flex:1;min-width:0" }, h("strong", {}, r.nombre), h("div", { class: "muted small", style: "overflow-wrap:anywhere" }, r.carpeta)),
-            r.existe ? h("button", { class: "small ghost", onclick: async () => {
-              const s = await guard(() => rpc("open_project", r.carpeta));
-              if (s) await opened(s);
-            } }, t("Abrir")) : h("span", { class: "badge" }, t("no encontrado")))))
-          : h("p", { class: "muted" }, t("Todavía no hay proyectos.")))),
+        recentList(info))),
     pdfCard(),
     h("div", { class: "home-foot" }, h("div", { class: "ornament" }, h("span")),
       h("p", { class: "muted small" }, t("Jerónimo {version} · modo {modo} · Usa solo libros que tengas derecho a traducir.", { version: info.version, modo: t(info.modo) }))));
+}
+
+/* Proyectos recientes. Quitar uno de la lista no borra nada del disco, y se puede deshacer. */
+function recentList(info) {
+  const box = h("div", {});
+  let undone = null; // { entry, position } del último que se quitó
+  const draw = () => {
+    box.textContent = "";
+    const rows = info.recientes.map((r) => h("div", { class: "recent" },
+      h("div", { style: "flex:1;min-width:0" }, h("strong", {}, r.nombre), h("div", { class: "muted small", style: "overflow-wrap:anywhere" }, r.carpeta)),
+      r.existe ? h("button", { class: "small ghost", onclick: async () => {
+        const s = await guard(() => rpc("open_project", r.carpeta));
+        if (s) await opened(s);
+      } }, t("Abrir")) : h("span", { class: "badge" }, t("no encontrado")),
+      h("button", { class: "recent-x", title: t("Quitar de recientes (no borra nada)"), "aria-label": t("Quitar de recientes (no borra nada)"),
+        onclick: async () => {
+          const res = await guard(() => rpc("remove_recent", r.carpeta));
+          if (!res) return;
+          info.recientes = res.recientes;
+          undone = { entry: res.quitado, position: res.posicion };
+          draw();
+        } }, "×")));
+    if (undone) {
+      rows.splice(Math.min(undone.position, rows.length), 0, h("div", { class: "recent removed" },
+        h("span", { class: "muted", style: "flex:1;min-width:0" }, t("«{nombre}» se quitó de la lista. No se borró nada del disco.", { nombre: undone.entry.nombre })),
+        h("button", { class: "small ghost", onclick: async () => {
+          const list = await guard(() => rpc("restore_recent", undone.entry, undone.position));
+          if (!list) return;
+          info.recientes = list;
+          undone = null;
+          draw();
+        } }, t("Deshacer"))));
+    }
+    put(box, rows.length ? rows : h("p", { class: "muted" }, t("Todavía no hay proyectos.")));
+  };
+  draw();
+  return box;
 }
 
 async function manageProfiles() {
@@ -648,6 +678,24 @@ function costText(est) {
   return `≈ ${money(est.coste_usd)} USD`;
 }
 
+/* Cambia el nombre que se ve del proyecto: la carpeta y el título del libro (que usa la IA) quedan igual. */
+async function renameProject() {
+  const input = h("input", { type: "text", maxlength: 120, value: state.summary.nombre || state.summary.titulo || "",
+    onkeydown: (e) => { if (e.key === "Enter") $("#modal-ok").click(); } });
+  const asked = modal(h("div", {},
+    h("h3", {}, t("Cambiar el nombre del proyecto")),
+    h("p", { class: "small" }, t("Es el nombre que ves en Jerónimo y en la lista de recientes. La carpeta del proyecto y el libro no cambian; los archivos que exportes desde ahora llevan el nombre nuevo.")),
+    input), { ok: t("Guardar") });
+  setTimeout(() => { input.focus(); input.select(); }, 30);
+  if (!(await asked)) return;
+  if (!input.value.trim()) return toast(t("Escribe un nombre para el proyecto."), true);
+  const summary = await guard(() => rpc("rename_project", input.value));
+  if (!summary) return;
+  state.summary = summary;
+  toast(t("Ahora el proyecto se llama «{nombre}».", { nombre: summary.nombre }));
+  render();
+}
+
 function renderSummary(v) {
   const s = state.summary;
   const prog = s.progreso;
@@ -664,9 +712,19 @@ function renderSummary(v) {
     { done: false, title: t("Exportar el EPUB"), text: t("Genera el libro traducido o una edición bilingüe."), go: "exportar" },
   ];
   const nextStep = steps.find((st) => !st.done) || steps[steps.length - 1];
+  const name = s.nombre || s.titulo;
+  const head = pageHead(t("Resumen del proyecto"), name,
+    [s.titulo && s.titulo !== name ? t("«{titulo}»", { titulo: s.titulo }) : null,
+      t("{autor} · {idioma_origen} → {idioma_destino} · {palabras} palabras", { autor: s.autor || t("Autor desconocido"), idioma_origen: s.idioma_origen, idioma_destino: s.idioma_destino, palabras: fmt(prog.palabras) })]
+      .filter(Boolean).join(" · "));
+  // El nombre del proyecto, con su botón para cambiarlo.
+  const title = head.querySelector("h1");
+  const titleRow = h("div", { class: "title-row" });
+  title.replaceWith(titleRow);
+  titleRow.append(title, h("button", { class: "small ghost", title: t("Cambiar el nombre del proyecto"), onclick: renameProject },
+    svgIcon("pluma"), t("Cambiar nombre")));
   put(v,
-    pageHead(t("Resumen del proyecto"), s.titulo || s.nombre,
-      t("{autor} · {idioma_origen} → {idioma_destino} · {palabras} palabras", { autor: s.autor || t("Autor desconocido"), idioma_origen: s.idioma_origen, idioma_destino: s.idioma_destino, palabras: fmt(prog.palabras) })),
+    head,
     h("div", { class: "card" },
       h("div", { class: "row" }, h("strong", {}, t("Progreso: {hechos} %", { hechos: pct(prog.hechos, prog.total) })), h("div", { class: "progress" }, h("div", { style: `width:${pct(prog.hechos, prog.total)}%` })),
         h("button", { class: "gold", onclick: () => go(nextStep.go) }, t("Seguir: {title}", { title: nextStep.title }))),

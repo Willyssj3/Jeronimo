@@ -122,6 +122,7 @@ class Api:
         self._provider_factory = provider_factory or make_provider
         self._marks_cache: dict[int, dict[int, dict[int, str]]] = {}
         self._ready_update: tuple[Path, Path, str] | None = None  # versión nueva ya descargada
+        self._settings_lock = threading.RLock()
 
     # -- ajustes y proyectos recientes ---------------------------------------
 
@@ -134,12 +135,53 @@ class Api:
     def _save_settings(self, data: dict) -> None:
         write_json(self._settings_path(), data)
 
-    def _remember(self, folder: Path, name: str) -> None:
-        data = self._settings()
-        recent = [r for r in data.get("recientes", []) if r.get("carpeta") != str(folder)]
-        recent.insert(0, {"carpeta": str(folder), "nombre": name})
-        data["recientes"] = recent[:12]
-        self._save_settings(data)
+    def _update_settings(self, change) -> dict:
+        """Lee, cambia y guarda los ajustes de una sola vez. La interfaz hace varias llamadas a la
+        vez (la consulta de versión nueva puede tardar mientras se abre un proyecto) y ninguna
+        tiene que pisar lo que guardó otra."""
+        with self._settings_lock:
+            data = self._settings()
+            change(data)
+            self._save_settings(data)
+            return data
+
+    def _remember(self, folder: Path, name: str, position: int = 0) -> None:
+        def change(data):
+            recent = [r for r in data.get("recientes", []) if r.get("carpeta") != str(folder)]
+            recent.insert(max(0, min(position, len(recent))), {"carpeta": str(folder), "nombre": name})
+            data["recientes"] = recent[:12]
+        self._update_settings(change)
+
+    def _recent_list(self) -> list[dict]:
+        return [dict(r, existe=(Path(r["carpeta"]) / "proyecto.json").exists())
+                for r in self._settings().get("recientes", [])]
+
+    def _rename_recent(self, folder: Path, name: str) -> None:
+        def change(data):
+            for r in data.get("recientes", []):
+                if r.get("carpeta") == str(folder):
+                    r["nombre"] = name
+        self._update_settings(change)
+
+    def remove_recent(self, folder: str) -> dict:
+        """Quita un proyecto de la lista de recientes. No borra nada del disco."""
+        with self._settings_lock:
+            data = self._settings()
+            recent = data.get("recientes", [])
+            position = next((i for i, r in enumerate(recent) if r.get("carpeta") == folder), None)
+            if position is None:
+                raise ValueError(tr("Ese proyecto ya no está en la lista de recientes."))
+            removed = recent.pop(position)
+            self._save_settings(data)
+        return {"quitado": removed, "posicion": position, "recientes": self._recent_list()}
+
+    def restore_recent(self, entry: dict, position: int = 0) -> list[dict]:
+        """Deshace «Quitar de recientes»: el proyecto vuelve al lugar donde estaba."""
+        folder = str((entry or {}).get("carpeta") or "").strip()
+        if not folder:
+            raise ValueError(tr("No sé qué proyecto volver a poner en la lista."))
+        self._remember(Path(folder), str(entry.get("nombre") or Path(folder).name), int(position))
+        return self._recent_list()
 
     def app_info(self) -> dict:
         return {
@@ -156,8 +198,7 @@ class Api:
             "planes": [{"id": k, "nombre": tr(v)} for k, v in PLANS.items()],
             "carpeta_por_defecto": str(default_projects_dir()),
             "perfiles": profiles.list_profiles(),
-            "recientes": [dict(r, existe=(Path(r["carpeta"]) / "proyecto.json").exists())
-                          for r in self._settings().get("recientes", [])],
+            "recientes": self._recent_list(),
             "proyecto_abierto": str(self._project.root) if self._project else None,
             "portable": updates.app_dir() is not None,
             # Se abrió en el navegador porque falta el componente de Microsoft para la ventana propia.
@@ -179,9 +220,7 @@ class Api:
     def set_ui_language(self, lang: str) -> str:
         if lang not in i18n.LANGS:
             raise ValueError(tr("Idioma desconocido."))
-        data = self._settings()
-        data["idioma_ui"] = lang
-        self._save_settings(data)
+        self._update_settings(lambda data: data.update(idioma_ui=lang))
         return i18n.set_language(lang)
 
     def choose_path(self, kind: str = "epub", directory: str = "") -> str | None:
@@ -235,9 +274,9 @@ class Api:
             except Exception:  # sin internet, GitHub no responde…: no molesta a nadie
                 latest = None
             else:
-                settings["actualizacion"] = {"consultado": datetime.now().isoformat(timespec="seconds"),
-                                             "ultima": latest}
-                self._save_settings(settings)
+                # Se vuelven a leer los ajustes: mientras se esperaba a GitHub pudo cambiar otra cosa.
+                checked = {"consultado": datetime.now().isoformat(timespec="seconds"), "ultima": latest}
+                self._update_settings(lambda data: data.update(actualizacion=checked))
         if latest and updates.is_newer(latest.get("version", ""), __version__):
             return dict(latest, auto=bool(latest.get("descarga")) and updates.can_self_update())
         return None
@@ -278,9 +317,7 @@ class Api:
         if self._tasks.state["activa"]:
             raise ValueError(tr("Hay una tarea en curso. Detenla antes de salir."))
         folder, new, _version = self._ready_update
-        data = self._settings()
-        data["actualizado_desde"] = __version__
-        self._save_settings(data)
+        self._update_settings(lambda data: data.update(actualizado_desde=__version__))
         updates.start_swap(folder, new, os.getpid())
         threading.Timer(0.8, os._exit, [0]).start()
         return True
@@ -289,20 +326,19 @@ class Api:
 
     def startup_notices(self) -> dict:
         """Lo que la interfaz muestra al abrir: si se acaba de actualizar y si ofrecer accesos directos."""
-        data = self._settings()
-        previous = data.pop("actualizado_desde", None)
+        with self._settings_lock:
+            data = self._settings()
+            previous = data.pop("actualizado_desde", None)
+            if previous is not None:
+                self._save_settings(data)
         portable = updates.app_dir() is not None
         offer = portable and not data.get("accesos_ofrecidos")
-        if previous is not None:
-            self._save_settings(data)
         return {"actualizado_a": __version__ if previous and previous != __version__ else None,
                 "ofrecer_accesos": offer}
 
     def create_shortcuts(self, create: bool = True) -> list[str]:
         """Accesos directos en el escritorio y en el menú Inicio (se ofrecen una sola vez)."""
-        data = self._settings()
-        data["accesos_ofrecidos"] = True
-        self._save_settings(data)
+        self._update_settings(lambda data: data.update(accesos_ofrecidos=True))
         folder = updates.app_dir()
         if not create:
             return []
@@ -468,6 +504,20 @@ class Api:
         self._project = None
         return True
 
+    def rename_project(self, name: str) -> dict:
+        """Cambia el nombre que se ve del proyecto abierto (también en recientes). La carpeta y el
+        título del libro, que usa la IA, no cambian; los archivos exportados sí llevan el nombre nuevo."""
+        name = " ".join((name or "").split())
+        if not name:
+            raise ValueError(tr("Escribe un nombre para el proyecto."))
+        if len(name) > 120:
+            raise ValueError(tr("El nombre es demasiado largo (máximo 120 caracteres)."))
+        p = self._need_project()
+        p.config["nombre"] = name
+        p.save_config()
+        self._rename_recent(p.root, name)
+        return self.project_summary()
+
     def set_settings(self, values: dict) -> dict:
         p = self._need_project()
         for key in ("nombre", "variante", "titulo_traducido", "revision", "idioma_destino"):
@@ -503,6 +553,8 @@ class Api:
                 raise ValueError(tr("El tamaño de bloque debe estar entre 1.000 y 60.000 caracteres."))
             p.config.setdefault("opciones", {})["bloque_manual"] = size
         p.save_config()
+        if "nombre" in values:
+            self._rename_recent(p.root, p.config["nombre"])
         return self.project_summary()
 
     def project_summary(self) -> dict:
@@ -605,9 +657,7 @@ class Api:
             clean["num_ctx"] = int(cfg["num_ctx"])
         p.config["proveedor"] = clean
         p.save_config()
-        settings = self._settings()
-        settings["proveedor"] = clean
-        self._save_settings(settings)
+        self._update_settings(lambda data: data.update(proveedor=clean))
         where = None
         if api_key and api_key.strip():
             where = save_api_key(clean["tipo"], api_key.strip())

@@ -59,8 +59,9 @@ convertir MOBI/AZW3.
 - Pruebas incluidas: flujo completo (`ui_test`), revisión, calidad, buscar y reemplazar, borrar
   traducción, perfiles, paquete para Proyectos, lectura, modo manual con plan, formatos de entrada
   (todas en español, buscan los botones por su texto). `ui_qa_fix_test` (corregir los avisos con
-  un clic, deshacer, unificar nombres, propuestas de la IA conectada y en modo manual) sirve en los
-  tres idiomas: `correr.py ui_qa_fix_test.mjs 8771 en`.
+  un clic, deshacer, unificar nombres, propuestas de la IA conectada y en modo manual) y
+  `ui_proyectos_test` (renombrar proyectos, quitar de recientes y deshacer) sirven en los tres
+  idiomas: `correr.py ui_qa_fix_test.mjs 8771 en`, `correr.py ui_proyectos_test.mjs 8772 pt`.
 - `python tools/prueba_actualizacion.py CARPETA_DIST`: prueba de punta a punta de la actualización
   automática con la app empaquetada (`pyinstaller` desde `packaging/`): un GitHub falso local
   sirve una «versión 9.9.9», la app vieja la descarga, se cierra, el ayudante cambia la carpeta y
@@ -107,7 +108,11 @@ convertir MOBI/AZW3.
   - `app/ui/`: `index.html`, `app.js` (sin frameworks; helper `h()` para crear elementos, vistas
     `render*`), `app.css` (estética del logo: azul tinta y dorado, tipografía EB Garamond), `fonts/`.
 - Ajustes del usuario: `%APPDATA%\TraductorDeLibros\ajustes.json` (recientes, idioma, aviso de
-  versión). Errores imprevistos: `registro.txt` en esa misma carpeta.
+  versión). Errores imprevistos: `registro.txt` en esa misma carpeta. Se cambian siempre con
+  `Api._update_settings()` (lee, cambia y guarda bajo un cerrojo): la interfaz hace llamadas a la
+  vez, y antes la consulta de versión nueva guardaba una copia vieja y borraba recientes.
+- El proyecto tiene `nombre` (el que se ve y se puede cambiar; da nombre a los archivos exportados)
+  y `titulo` (el título original del libro, que va en las instrucciones a la IA y no cambia).
 - `packaging/`: PyInstaller (`Jeronimo.spec`, carpeta con `Jeronimo.exe` y `_internal`),
   `LEEME.txt` (va dentro de la carpeta), prueba del OCR de Windows. `.github/workflows/build.yml`:
   pruebas en Linux, compilación en Windows y publicación. **Se distribuye solo como carpeta
@@ -167,8 +172,8 @@ hechas con `tools/capturas_readme.py`, preguntas frecuentes); el usuario eligió
 página web aparte.
 
 Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trello por cada parte):
-1. **Versión 0.3.2**: (a) renombrar proyectos ya creados (cambia el nombre que se ve, no la carpeta)
-   y quitarlos de recientes (no borra nada del disco, con «Deshacer»); (b) sugerencias y reporte de
+1. **Versión 0.3.2**: (a) ✅ renombrar proyectos ya creados (cambia el nombre que se ve, no la
+   carpeta) y quitarlos de recientes (no borra nada del disco, con «Deshacer»); (b) sugerencias y reporte de
    errores con un **formulario de Google sin cuenta** (las respuestas le llegan al usuario en una
    planilla privada; no GitHub): la app abre el formulario ya completado con el tipo, la
    descripción y, si es un error, datos técnicos opcionales (versión, Windows, último error) sin el
@@ -176,7 +181,8 @@ Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trel
    formulario y pasa el enlace; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
    Cafecito y PayPal** en la app, el README y `.github/FUNDING.yml`; nunca ventanas que
    interrumpan ni donaciones dentro de los libros exportados. El usuario crea las cuentas y pasa
-   los enlaces.
+   los enlaces. Al publicarla, rehacer las capturas del README (`tools/capturas_readme.py`):
+   cambian el resumen («Cambiar nombre») y el inicio (la «×» de recientes).
 2. **Versión 0.4.0**: (a) al crear el proyecto, dar ya las instrucciones para armarlo en el chat de
    IA que use, con la guía de estilo y el glosario; (b) revisión final del libro completo, que
    busque errores e incongruencias usando las notas que quedan en cada capítulo; (c) lector de
