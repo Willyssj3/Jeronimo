@@ -117,6 +117,21 @@ check((await page.locator(".title-row h1").textContent()) === NEW_NAME, "se abre
 await closeProject();
 check((await recentNames())[0] === NEW_NAME, "y vuelve primero a recientes");
 
+// «Apoyar el proyecto»: sin enlaces no aparece; con enlaces (de ejemplo) abre la ventana con las tres formas.
+check(await page.locator(".support-line").count() === 0, "sin enlaces de apoyo no aparece nada");
+await page.evaluate(() => {
+  state.info.apoyo = [
+    { id: "github", nombre: "GitHub Sponsors", detalle: t("desde cualquier país") },
+    { id: "cafecito", nombre: "Cafecito", detalle: t("en pesos, con Mercado Pago") },
+    { id: "paypal", nombre: "PayPal", detalle: t("con tarjeta o cuenta de PayPal") }];
+  render();
+});
+await page.locator(".support-line button").click();
+await page.waitForSelector("#modal-backdrop:not([hidden])");
+check(await page.locator("#modal-body .support-option").count() === 3, "la ventana de apoyo muestra las tres formas");
+await shot("5-apoyar-el-proyecto");
+await page.click("#modal-ok");
+
 if (SPANISH) console.log("textos a revisar:", leftovers.length ? [...new Set(leftovers)] : 0);
 if (leftovers.length) process.exitCode = 1;
 console.log("errores:", errors.length ? errors : "ninguno");

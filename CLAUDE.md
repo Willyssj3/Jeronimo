@@ -96,7 +96,9 @@ convertir MOBI/AZW3.
     `convert.py` + `pdf2epub.py` + `ocr.py` (convertir PDF, Word, TXT, FB2, MOBI a EPUB, con OCR),
     `updates.py` (versión nueva: aviso, descarga del ZIP, reemplazo de la carpeta con un ayudante
     de PowerShell y vuelta atrás), `components.py` (lo que puede faltar: WebView2, Calibre con
-    winget, páginas de Configuración de Windows, accesos directos), `i18n.py` + `locales/`
+    winget, páginas de Configuración de Windows, accesos directos), `support.py` (enlaces de
+    «Apoyar el proyecto»: si están vacíos no se muestra nada; solo se abren páginas de cada
+    servicio), `i18n.py` + `locales/`
     (idiomas de la interfaz),
     `providers/` (Anthropic, OpenAI y compatibles, Gemini, Ollama…), `cli.py` (línea de comandos,
     solo en español).
@@ -180,8 +182,9 @@ Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trel
    nombre de usuario en las rutas y con vista previa; nunca texto de libros. El usuario crea el
    formulario y pasa el enlace; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
    Cafecito y PayPal** en la app, el README y `.github/FUNDING.yml`; nunca ventanas que
-   interrumpan ni donaciones dentro de los libros exportados. El usuario crea las cuentas y pasa
-   los enlaces. Al publicarla, rehacer las capturas del README (`tools/capturas_readme.py`):
+   interrumpan ni donaciones dentro de los libros exportados. La parte de la app ya está (enlace al
+   pie del inicio y una línea después de exportar, `support.py`); falta que el usuario cree las
+   cuentas y pase los enlaces para cargarlos en `support.LINKS`, el README y `FUNDING.yml`. Al publicarla, rehacer las capturas del README (`tools/capturas_readme.py`):
    cambian el resumen («Cambiar nombre») y el inicio (la «×» de recientes).
 2. **Versión 0.4.0**: (a) al crear el proyecto, dar ya las instrucciones para armarlo en el chat de
    IA que use, con la guía de estilo y el glosario; (b) revisión final del libro completo, que

@@ -444,6 +444,13 @@ details > summary::marker { color: var(--gold); }
 .how strong { font-family: var(--serif); font-size: 1.16rem; font-weight: 600; color: #f3e9d6; }
 .how span { font-size: .86rem; line-height: 1.45; color: #b8c2ce; }
 .home-foot { text-align: center; }
+.support-line { margin: 6px 0 0; }
+button.support-option {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  padding: 10px 14px; text-align: left; background: var(--card); border-color: var(--border-strong);
+}
+button.support-option:hover:not(:disabled) { background: var(--gold-wash); border-color: var(--gold-line); }
+button.support-option strong { font-family: var(--serif); font-size: 1.08rem; color: var(--heading); }
 .recent { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .recent:last-child { border-bottom: none; }
 .recent strong { font-family: var(--serif); font-size: 1.1rem; font-weight: 600; color: var(--heading); }

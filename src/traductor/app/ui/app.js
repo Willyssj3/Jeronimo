@@ -539,7 +539,26 @@ function renderHome(v) {
         recentList(info))),
     pdfCard(),
     h("div", { class: "home-foot" }, h("div", { class: "ornament" }, h("span")),
-      h("p", { class: "muted small" }, t("Jerónimo {version} · modo {modo} · Usa solo libros que tengas derecho a traducir.", { version: info.version, modo: t(info.modo) }))));
+      h("p", { class: "muted small" }, t("Jerónimo {version} · modo {modo} · Usa solo libros que tengas derecho a traducir.", { version: info.version, modo: t(info.modo) })),
+      supportLink()));
+}
+
+/* Apoyar el proyecto: discreto, nunca en una ventana que interrumpa. No aparece si no hay enlaces. */
+function supportLink(lead = "") {
+  if (!(state.info && (state.info.apoyo || []).length)) return null;
+  return h("p", { class: "muted small support-line" }, lead,
+    h("button", { class: "link inline", onclick: supportDialog }, "♥ ", t("Apoyar el proyecto")));
+}
+
+async function supportDialog() {
+  await modal(h("div", { class: "stack" },
+    h("div", { class: "eyebrow" }, t("Apoyar el proyecto")),
+    h("h3", { style: "margin-top:0" }, t("Gracias por pensar en colaborar")),
+    h("p", {}, t("Jerónimo es y va a seguir siendo gratis. Si te sirve y quieres colaborar con su desarrollo, puedes hacerlo de alguna de estas formas:")),
+    h("div", { class: "provider-list" }, state.info.apoyo.map((s) => h("button", { class: "support-option", onclick: () => guard(() => rpc("open_support", s.id)) },
+      h("strong", {}, s.nombre), h("span", { class: "muted small" }, s.detalle)))),
+    h("p", { class: "muted small" }, t("Se abre en tu navegador. Jerónimo no guarda ni ve ningún dato de pago."))),
+  { ok: t("Cerrar"), cancel: null });
 }
 
 /* Proyectos recientes. Quitar uno de la lista no borra nada del disco, y se puede deshacer. */
@@ -2308,7 +2327,8 @@ function renderExport(v) {
     put(result, h("div", { class: "result" },
       h("p", {}, h("strong", {}, t("Listo: ")), r.ruta),
       r.total_avisos ? h("p", { class: "warn" }, t("{total_avisos} párrafo(s) con avisos de formato; revisa: {slice}", { total_avisos: r.total_avisos, slice: r.avisos.slice(0, 5).join(" · ") })) : null,
-      h("button", { class: "ghost", onclick: () => rpc("open_folder", r.ruta) }, t("Abrir carpeta"))));
+      h("button", { class: "ghost", onclick: () => rpc("open_folder", r.ruta) }, t("Abrir carpeta")),
+      supportLink(t("¿Te sirvió Jerónimo? "))));
   };
   const qaBox = h("div", {});
   rpc("quality").then((q) => {

@@ -18,7 +18,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .. import __version__, components, i18n, inline, knowledge, profiles, qa, qa_fix, review, updates
+from .. import __version__, components, i18n, inline, knowledge, profiles, qa, qa_fix, review, support, updates
 from .. import search as finder
 from ..epub import EpubBook, EpubError
 from ..i18n import N_, tr
@@ -200,6 +200,7 @@ class Api:
             "perfiles": profiles.list_profiles(),
             "recientes": self._recent_list(),
             "proyecto_abierto": str(self._project.root) if self._project else None,
+            "apoyo": support.links(),
             "portable": updates.app_dir() is not None,
             # Se abrió en el navegador porque falta el componente de Microsoft para la ventana propia.
             "falta_webview2": self._mode == "navegador" and updates.app_dir() is not None
@@ -388,6 +389,13 @@ class Api:
         if not (url == updates.REPO_URL or url.startswith(updates.REPO_URL + "/")):
             raise ValueError(tr("Solo se pueden abrir páginas del proyecto Jerónimo."))
         return bool(webbrowser.open(url))
+
+    def open_support(self, kind: str) -> bool:
+        """Abre en el navegador una de las formas de apoyar el proyecto (solo las configuradas)."""
+        link = support.url(kind)
+        if not link:
+            raise ValueError(tr("Esa forma de apoyar el proyecto no está disponible."))
+        return bool(webbrowser.open(link))
 
     def open_folder(self, path: str) -> bool:
         target = Path(path)
