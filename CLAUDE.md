@@ -98,7 +98,9 @@ convertir MOBI/AZW3.
     de PowerShell y vuelta atrás), `components.py` (lo que puede faltar: WebView2, Calibre con
     winget, páginas de Configuración de Windows, accesos directos), `support.py` (enlaces de
     «Apoyar el proyecto»: si están vacíos no se muestra nada; solo se abren páginas de cada
-    servicio), `i18n.py` + `locales/`
+    servicio), `feedback.py` (sugerencias y errores: arma el formulario de Google ya completado;
+    los datos técnicos son optativos y salen sin rutas ni nombres de usuario; `FORM_URL` y
+    `ENTRIES` salen del «vínculo previamente completado» del formulario), `i18n.py` + `locales/`
     (idiomas de la interfaz),
     `providers/` (Anthropic, OpenAI y compatibles, Gemini, Ollama…), `cli.py` (línea de comandos,
     solo en español).
@@ -179,8 +181,12 @@ Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trel
    errores con un **formulario de Google sin cuenta** (las respuestas le llegan al usuario en una
    planilla privada; no GitHub): la app abre el formulario ya completado con el tipo, la
    descripción y, si es un error, datos técnicos opcionales (versión, Windows, último error) sin el
-   nombre de usuario en las rutas y con vista previa; nunca texto de libros. El usuario crea el
-   formulario y pasa el enlace; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
+   nombre de usuario en las rutas y con vista previa; nunca texto de libros. La parte de la app ya
+   está (`feedback.py`; enlace al pie del inicio y en la barra lateral, oculto hasta configurarlo);
+   falta que el usuario cree el formulario (pasos dados el 20/10/2026: tipo con las opciones
+   exactas «Idea o sugerencia» y «Error», contanos, datos técnicos, correo optativo, sin pedir
+   cuenta, respuestas en una planilla) y pase el «vínculo previamente completado» con TEXTO y
+   DATOS, de donde salen `FORM_URL` y `ENTRIES`; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
    Cafecito y PayPal** en la app, el README y `.github/FUNDING.yml`; nunca ventanas que
    interrumpan ni donaciones dentro de los libros exportados. Hecho: enlace al pie del inicio y una
    línea después de exportar (`support.py`), sección en el README y `.github/FUNDING.yml`, con

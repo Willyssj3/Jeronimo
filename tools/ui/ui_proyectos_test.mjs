@@ -29,7 +29,7 @@ const spanishCheck = async (name) => {
   if (!SPANISH) return;
   const texts = await page.evaluate(() => {
     // Afuera: los nombres de proyecto, las rutas y el título del libro (los escribe el usuario).
-    const skip = ".recent strong, .recent .muted.small, #project-name, .title-row h1, input, select#ui-lang, .lead";
+    const skip = ".recent strong, .recent .muted.small, #project-name, .title-row h1, input, select#ui-lang, .lead, .feedback-preview, textarea";
     const out = new Set();
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -128,6 +128,27 @@ await shot("5-apoyar-el-proyecto");
 await page.click("#modal-ok");
 await page.evaluate(() => { state.info.apoyo = []; render(); });
 check(await page.locator(".support-line").count() === 0, "sin enlaces de apoyo no aparece nada");
+
+// «Sugerencias y errores» (como si el formulario estuviera configurado; no se abre el navegador).
+await page.evaluate(() => { state.info.sugerencias = true; render(); });
+await btn("Sugerencias y errores", page.locator(".home-foot")).click();
+await page.waitForSelector("#modal-backdrop:not([hidden])");
+check(await page.locator(".feedback-preview").isHidden(), "los datos técnicos no se suman si no se eligen");
+await page.locator("#modal-body label", { hasText: T("Un error") }).click();
+check(await page.locator(".feedback-preview").isVisible() && await page.locator("#modal-body input[type=checkbox]").isChecked(),
+  "si es un error, se ofrecen los datos técnicos y se ven antes de enviar");
+const details = await page.locator(".feedback-preview").textContent();
+check(details.startsWith("Jerónimo") && !/[A-Za-z]:\\/.test(details), "los datos técnicos no tienen carpetas");
+await page.fill("#modal-body textarea", "Se cerró la ventana al exportar.");
+await shot("6-sugerencias-y-errores");
+await page.click("#modal-cancel");
+await page.fill("#open-folder", `${work}/proyecto`);
+await btn("Abrir", page.locator(".card:has(#open-folder)")).click();
+await page.waitForSelector("ol.steps");
+await page.evaluate(() => { state.info.sugerencias = true; render(); });  // al abrir, la app vuelve a pedir sus datos
+await page.waitForTimeout(300);
+check(await page.locator("#btn-feedback").isVisible(), "dentro del proyecto, el enlace está en la barra lateral");
+await shot("7-sugerencias-en-la-barra");
 
 if (SPANISH) console.log("textos a revisar:", leftovers.length ? [...new Set(leftovers)] : 0);
 if (leftovers.length) process.exitCode = 1;

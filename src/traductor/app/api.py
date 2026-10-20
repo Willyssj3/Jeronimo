@@ -18,7 +18,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .. import __version__, components, i18n, inline, knowledge, profiles, qa, qa_fix, review, support, updates
+from .. import __version__, components, feedback, i18n, inline, knowledge, profiles, qa, qa_fix, review, support, updates
 from .. import search as finder
 from ..epub import EpubBook, EpubError
 from ..i18n import N_, tr
@@ -201,6 +201,7 @@ class Api:
             "recientes": self._recent_list(),
             "proyecto_abierto": str(self._project.root) if self._project else None,
             "apoyo": support.links(),
+            "sugerencias": feedback.configured(),
             "portable": updates.app_dir() is not None,
             # Se abrió en el navegador porque falta el componente de Microsoft para la ventana propia.
             "falta_webview2": self._mode == "navegador" and updates.app_dir() is not None
@@ -389,6 +390,16 @@ class Api:
         if not (url == updates.REPO_URL or url.startswith(updates.REPO_URL + "/")):
             raise ValueError(tr("Solo se pueden abrir páginas del proyecto Jerónimo."))
         return bool(webbrowser.open(url))
+
+    def feedback_details(self) -> str:
+        """Los datos técnicos que se pueden sumar a un reporte, para mostrarlos antes de enviar."""
+        return feedback.technical_details(mode=self._mode, ui_language=i18n.language(),
+                                          log_path=config_dir() / "registro.txt")
+
+    def open_feedback(self, kind: str, text: str, include_details: bool = False) -> bool:
+        """Abre el formulario de sugerencias ya completado; la persona lo revisa y lo envía."""
+        details = self.feedback_details() if include_details else ""
+        return bool(webbrowser.open(feedback.form_url(kind, text, details)))
 
     def open_support(self, kind: str) -> bool:
         """Abre en el navegador una de las formas de apoyar el proyecto (solo las configuradas)."""

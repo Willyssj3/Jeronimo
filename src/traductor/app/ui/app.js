@@ -331,6 +331,7 @@ async function startTask(fn) {
 }
 
 $("#btn-task-cancel").onclick = () => guard(() => rpc("cancel_task"));
+$("#btn-feedback").onclick = feedbackDialog;
 $("#ui-lang").onchange = (e) => changeLanguage(e.target.value);
 $("#btn-task-log").onclick = async () => {
   const task = await guard(() => rpc("task_status"));
@@ -418,6 +419,7 @@ function setChrome() {
   $("#sidebar").hidden = !open;
   $("#btn-close-project").hidden = !open;
   $("#project-name").textContent = open ? state.summary.nombre || state.summary.titulo : "";
+  $("#btn-feedback").hidden = !(state.info && state.info.sugerencias);
   if (open) {
     const prog = state.summary.progreso;
     $("#side-pct").textContent = t("{n} %", { n: pct(prog.hechos, prog.total) });
@@ -540,7 +542,57 @@ function renderHome(v) {
     pdfCard(),
     h("div", { class: "home-foot" }, h("div", { class: "ornament" }, h("span")),
       h("p", { class: "muted small" }, t("Jerónimo {version} · modo {modo} · Usa solo libros que tengas derecho a traducir.", { version: info.version, modo: t(info.modo) })),
-      supportLink()));
+      footLinks()));
+}
+
+/* Al pie del inicio: apoyar el proyecto y mandar sugerencias (cada uno, si está disponible). */
+function footLinks() {
+  const links = [
+    (state.info.apoyo || []).length ? h("button", { class: "link inline", onclick: supportDialog }, "♥ ", t("Apoyar el proyecto")) : null,
+    state.info.sugerencias ? h("button", { class: "link inline", onclick: feedbackDialog }, t("Sugerencias y errores")) : null,
+  ].filter(Boolean);
+  if (!links.length) return null;
+  return h("p", { class: "muted small support-line" }, links.flatMap((link, i) => (i ? [" · ", link] : [link])));
+}
+
+/* Sugerencias y errores: se abre el formulario (sin cuenta) ya completado; la persona lo revisa y lo envía. */
+async function feedbackDialog() {
+  const details = await guard(() => rpc("feedback_details"));
+  if (details === undefined) return;
+  let kind = "idea";
+  const include = h("input", { type: "checkbox", onchange: () => { preview.hidden = !include.checked; } });
+  const preview = h("pre", { class: "log feedback-preview", hidden: true }, details);
+  const kinds = h("div", { class: "provider-list" });
+  const drawKinds = () => {
+    kinds.textContent = "";
+    for (const [k, label] of [["idea", t("Una idea o sugerencia")], ["error", t("Un error")]]) {
+      kinds.append(h("label", { class: k === kind ? "selected" : "" },
+        h("input", { type: "radio", name: "fb-kind", value: k, checked: k === kind, onchange: () => {
+          kind = k;
+          include.checked = k === "error";
+          preview.hidden = !include.checked;
+          drawKinds();
+        } }),
+        h("span", {}, label)));
+    }
+  };
+  drawKinds();
+  const text = h("textarea", { placeholder: t("Cuéntanos tu idea, o qué pasó y qué estabas haciendo. Por favor, no pegues texto de libros.") });
+  const asked = modal(h("div", { class: "stack" },
+    h("div", { class: "eyebrow" }, t("Sugerencias y errores")),
+    h("h3", { style: "margin-top:0" }, t("Cuéntanos")),
+    h("p", { class: "small" }, t("Se abre un formulario ya completado en tu navegador: lo revisas y tocas «Enviar». No hace falta ninguna cuenta.")),
+    kinds,
+    text,
+    h("label", { class: "row", style: "gap:8px;font-weight:500;margin:0" }, include,
+      h("span", {}, t("Sumar datos técnicos: versión, Windows y el último error, sin tus carpetas ni texto de libros"))),
+    preview), { ok: t("Abrir el formulario") });
+  setTimeout(() => text.focus(), 30);
+  if (!(await asked)) return;
+  if (!text.value.trim()) return toast(t("Escribe tu idea o qué pasó."), true);
+  if (await guard(() => rpc("open_feedback", kind, text.value, include.checked))) {
+    toast(t("El formulario se abrió en tu navegador: revísalo y toca «Enviar». ¡Gracias!"));
+  }
 }
 
 /* Apoyar el proyecto: discreto, nunca en una ventana que interrumpa. No aparece si no hay enlaces. */
