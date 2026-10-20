@@ -164,7 +164,9 @@ convertir MOBI/AZW3.
 
 ## Estado y pendientes
 
-Versión publicada: **0.3.1** (12/10/2026). La 0.3.0 fue la primera portable, con actualización
+Versión publicada: **0.3.2** (20/10/2026: renombrar proyectos y quitarlos de recientes,
+sugerencias y errores con el formulario del usuario, «Apoyar el proyecto» con Cafecito y PayPal;
+la actualización real de la 0.3.1 a la 0.3.2 se probó y anduvo). La 0.3.0 fue la primera portable, con actualización
 automática, interfaz en inglés y portugués y la página final «Traducido con Jerónimo» al exportar;
 la 0.3.1 suma la corrección de los avisos de calidad con un clic (`qa_fix.py`): lo mecánico (signos
 ¿ ¡, espacios, guion → raya) al instante y con deshacer, los nombres con dos grafías se unifican
@@ -176,8 +178,8 @@ hechas con `tools/capturas_readme.py`, preguntas frecuentes); el usuario eligió
 página web aparte.
 
 Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trello por cada parte):
-1. **Versión 0.3.2** (lista para publicar el 20/10/2026, con notas en `docs/versiones/v0.3.2.md` y
-   capturas del README rehechas; falta el OK del usuario): (a) renombrar proyectos ya creados
+1. ✅ **Versión 0.3.2** (publicada el 20/10/2026, con notas en `docs/versiones/v0.3.2.md` y
+   capturas del README rehechas): (a) renombrar proyectos ya creados
    (cambia el nombre que se ve, no la carpeta) y quitarlos de recientes (no borra nada del disco,
    con «Deshacer»); (b) sugerencias y reporte de errores con el **formulario de Google sin cuenta**
    del usuario (https://forms.gle/pAQmha3pgsHxeNfU7; las respuestas van a su planilla privada,
