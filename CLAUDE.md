@@ -176,25 +176,24 @@ hechas con `tools/capturas_readme.py`, preguntas frecuentes); el usuario eligió
 página web aparte.
 
 Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trello por cada parte):
-1. **Versión 0.3.2**: (a) ✅ renombrar proyectos ya creados (cambia el nombre que se ve, no la
-   carpeta) y quitarlos de recientes (no borra nada del disco, con «Deshacer»); (b) sugerencias y reporte de
-   errores con un **formulario de Google sin cuenta** (las respuestas le llegan al usuario en una
-   planilla privada; no GitHub): la app abre el formulario ya completado con el tipo, la
-   descripción y, si es un error, datos técnicos opcionales (versión, Windows, último error) sin el
-   nombre de usuario en las rutas y con vista previa; nunca texto de libros. Hecho y conectado
-   (20/10/2026): `feedback.py` con el formulario del usuario (https://forms.gle/pAQmha3pgsHxeNfU7:
-   «Tipo» con las opciones exactas «Idea o sugerencia» y «Error», «Contanos», «Datos técnicos» y
-   un correo optativo que la app no completa; no pide cuenta y las respuestas van a su planilla).
-   Los números `entry` salen de `FB_PUBLIC_LOAD_DATA_` en la página del formulario; si el usuario
-   cambia las preguntas, hay que volver a leerlos; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
-   Cafecito y PayPal** en la app, el README y `.github/FUNDING.yml`; nunca ventanas que
-   interrumpan ni donaciones dentro de los libros exportados. Hecho: enlace al pie del inicio y una
-   línea después de exportar (`support.py`), sección en el README y `.github/FUNDING.yml`, con
-   Cafecito (https://cafecito.app/willyssj3) y PayPal (https://paypal.me/Willyssj3). Falta GitHub
-   Sponsors, pendiente de aprobación (20/10/2026): al aprobarse, cargar
-   https://github.com/sponsors/Willyssj3 en `support.LINKS`, `github: [Willyssj3]` en
-   `FUNDING.yml` y el enlace en el README. Al publicarla, rehacer las capturas del README (`tools/capturas_readme.py`):
-   cambian el resumen («Cambiar nombre») y el inicio (la «×» de recientes).
+1. **Versión 0.3.2** (lista para publicar el 20/10/2026, con notas en `docs/versiones/v0.3.2.md` y
+   capturas del README rehechas; falta el OK del usuario): (a) renombrar proyectos ya creados
+   (cambia el nombre que se ve, no la carpeta) y quitarlos de recientes (no borra nada del disco,
+   con «Deshacer»); (b) sugerencias y reporte de errores con el **formulario de Google sin cuenta**
+   del usuario (https://forms.gle/pAQmha3pgsHxeNfU7; las respuestas van a su planilla privada,
+   probado): `feedback.py` abre el formulario ya completado con el tipo («Idea o sugerencia» o
+   «Error», exactas), el texto y, si se elige, datos técnicos sin rutas ni nombres de usuario y con
+   vista previa; nunca texto de libros. Los números `entry` salen de `FB_PUBLIC_LOAD_DATA_` en la
+   página del formulario; si el usuario cambia las preguntas, hay que volver a leerlos; (c) «Apoyar
+   el proyecto», discreto, con **Cafecito** (https://cafecito.app/willyssj3) y **PayPal**
+   (https://paypal.me/Willyssj3) en la app (`support.py`: pie del inicio y después de exportar), el
+   README y `.github/FUNDING.yml`; nunca ventanas que interrumpan ni donaciones dentro de los
+   libros exportados. Para que se vea el botón «Sponsor» del repositorio, el usuario tiene que
+   tildar «Sponsorships» en Settings → General → Features.
+   - **GitHub Sponsors** quedó para después (decisión del usuario, 20/10/2026; tarjeta propia en
+     Trello): su solicitud está pendiente de aprobación. Al aprobarse, cargar
+     https://github.com/sponsors/Willyssj3 en `support.LINKS`, `github: [Willyssj3]` en
+     `FUNDING.yml` y el enlace en el README.
 2. **Versión 0.4.0**: (a) al crear el proyecto, dar ya las instrucciones para armarlo en el chat de
    IA que use, con la guía de estilo y el glosario; (b) revisión final del libro completo, que
    busque errores e incongruencias usando las notas que quedan en cada capítulo; (c) lector de

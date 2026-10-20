@@ -120,6 +120,9 @@ ofrece instalarlo.
 **Para todos**
 - App en **español, inglés y portugués**, con **modo oscuro**.
 - Descarga portable, sin instalar, que se actualiza sola.
+- Proyectos a tu medida: cámbiales el nombre y quita de la lista de recientes los que ya no
+  uses (sin borrar nada).
+- **Sugerencias y errores** desde la app, con un formulario que no pide cuenta.
 
 ## Capturas
 
