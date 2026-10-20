@@ -20,8 +20,8 @@ from .i18n import tr
 
 # El formulario (vínculo «viewform») y el número de cada pregunta (entry.NNN), sacados del
 # «vínculo previamente completado» que arma su dueño en Google Forms.
-FORM_URL = ""
-ENTRIES = {"tipo": "", "texto": "", "datos": ""}
+FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdYsM3qULIwCeMmpbpd0SRM6RrdmhE4DKYNC8zlzkwGbYmUUA/viewform"
+ENTRIES = {"tipo": "2061914953", "texto": "74226987", "datos": "1139848926"}  # el correo (opcional) lo escribe cada uno
 # Opciones de la pregunta «Tipo», escritas exactamente como en el formulario.
 KINDS = {"idea": "Idea o sugerencia", "error": "Error"}
 

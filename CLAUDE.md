@@ -181,12 +181,12 @@ Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trel
    errores con un **formulario de Google sin cuenta** (las respuestas le llegan al usuario en una
    planilla privada; no GitHub): la app abre el formulario ya completado con el tipo, la
    descripción y, si es un error, datos técnicos opcionales (versión, Windows, último error) sin el
-   nombre de usuario en las rutas y con vista previa; nunca texto de libros. La parte de la app ya
-   está (`feedback.py`; enlace al pie del inicio y en la barra lateral, oculto hasta configurarlo);
-   falta que el usuario cree el formulario (pasos dados el 20/10/2026: tipo con las opciones
-   exactas «Idea o sugerencia» y «Error», contanos, datos técnicos, correo optativo, sin pedir
-   cuenta, respuestas en una planilla) y pase el «vínculo previamente completado» con TEXTO y
-   DATOS, de donde salen `FORM_URL` y `ENTRIES`; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
+   nombre de usuario en las rutas y con vista previa; nunca texto de libros. Hecho y conectado
+   (20/10/2026): `feedback.py` con el formulario del usuario (https://forms.gle/pAQmha3pgsHxeNfU7:
+   «Tipo» con las opciones exactas «Idea o sugerencia» y «Error», «Contanos», «Datos técnicos» y
+   un correo optativo que la app no completa; no pide cuenta y las respuestas van a su planilla).
+   Los números `entry` salen de `FB_PUBLIC_LOAD_DATA_` en la página del formulario; si el usuario
+   cambia las preguntas, hay que volver a leerlos; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
    Cafecito y PayPal** en la app, el README y `.github/FUNDING.yml`; nunca ventanas que
    interrumpan ni donaciones dentro de los libros exportados. Hecho: enlace al pie del inicio y una
    línea después de exportar (`support.py`), sección en el README y `.github/FUNDING.yml`, con

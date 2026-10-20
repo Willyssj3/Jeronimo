@@ -121,13 +121,13 @@ check((await recentNames())[0] === NEW_NAME, "y vuelve primero a recientes");
 // (no se toca ninguna, para no abrir el navegador). Sin enlaces, no aparece nada.
 const configured = await page.evaluate(() => state.info.apoyo.length);
 check(configured > 0 && await page.locator(".support-line").count() === 1, "el enlace para apoyar está al pie del inicio");
-await page.locator(".support-line button").click();
+await page.locator(".support-line button", { hasText: T("Apoyar el proyecto") }).click();
 await page.waitForSelector("#modal-backdrop:not([hidden])");
 check(await page.locator("#modal-body .support-option").count() === configured, "la ventana muestra las formas de apoyar cargadas");
 await shot("5-apoyar-el-proyecto");
 await page.click("#modal-ok");
 await page.evaluate(() => { state.info.apoyo = []; render(); });
-check(await page.locator(".support-line").count() === 0, "sin enlaces de apoyo no aparece nada");
+check(await page.locator(".support-line button", { hasText: T("Apoyar el proyecto") }).count() === 0, "sin enlaces de apoyo no aparece nada");
 
 // «Sugerencias y errores» (como si el formulario estuviera configurado; no se abre el navegador).
 await page.evaluate(() => { state.info.sugerencias = true; render(); });

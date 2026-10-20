@@ -47,9 +47,17 @@ def test_technical_details(tmp_path):
     assert len(details) <= feedback.MAX_DETAILS
 
 
-def test_form_url_only_when_configured():
+def test_form_url_only_when_configured(monkeypatch):
+    monkeypatch.setattr(feedback, "FORM_URL", "")
+    assert not feedback.configured()
     with pytest.raises(ValueError):
         feedback.form_url("idea", "Hola")
+
+
+def test_the_published_form_is_configured():
+    assert feedback.configured() and feedback.FORM_URL.endswith("/viewform")
+    assert all(entry.isdigit() for entry in feedback.ENTRIES.values())
+    assert set(feedback.KINDS.values()) == {"Idea o sugerencia", "Error"}  # como en el formulario
 
 
 def test_form_url(form):
