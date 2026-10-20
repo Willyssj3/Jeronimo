@@ -42,3 +42,9 @@ def test_api_opens_only_configured_links(monkeypatch, tmp_path):
         api.open_support("cafecito")  # no está cargado
     with pytest.raises(ValueError):
         api.open_support("https://otra-pagina.example")
+
+
+def test_the_published_links_are_valid():
+    for kind in support.LINKS:
+        support.url(kind)  # no falla: cada enlace cargado es una página de su servicio
+    assert {s["id"] for s in support.links()} >= {"cafecito", "paypal"}

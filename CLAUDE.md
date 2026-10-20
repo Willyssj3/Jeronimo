@@ -182,9 +182,12 @@ Pendiente, en este orden (lo fijó el usuario el 19/10/2026; una tarjeta de Trel
    nombre de usuario en las rutas y con vista previa; nunca texto de libros. El usuario crea el
    formulario y pasa el enlace; (c) «Apoyar el proyecto», discreto, con **GitHub Sponsors,
    Cafecito y PayPal** en la app, el README y `.github/FUNDING.yml`; nunca ventanas que
-   interrumpan ni donaciones dentro de los libros exportados. La parte de la app ya está (enlace al
-   pie del inicio y una línea después de exportar, `support.py`); falta que el usuario cree las
-   cuentas y pase los enlaces para cargarlos en `support.LINKS`, el README y `FUNDING.yml`. Al publicarla, rehacer las capturas del README (`tools/capturas_readme.py`):
+   interrumpan ni donaciones dentro de los libros exportados. Hecho: enlace al pie del inicio y una
+   línea después de exportar (`support.py`), sección en el README y `.github/FUNDING.yml`, con
+   Cafecito (https://cafecito.app/willyssj3) y PayPal (https://paypal.me/Willyssj3). Falta GitHub
+   Sponsors, pendiente de aprobación (20/10/2026): al aprobarse, cargar
+   https://github.com/sponsors/Willyssj3 en `support.LINKS`, `github: [Willyssj3]` en
+   `FUNDING.yml` y el enlace en el README. Al publicarla, rehacer las capturas del README (`tools/capturas_readme.py`):
    cambian el resumen («Cambiar nombre») y el inicio (la «×» de recientes).
 2. **Versión 0.4.0**: (a) al crear el proyecto, dar ya las instrucciones para armarlo en el chat de
    IA que use, con la guía de estilo y el glosario; (b) revisión final del libro completo, que

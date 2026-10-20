@@ -9,9 +9,11 @@ from __future__ import annotations
 from .i18n import N_, tr
 
 LINKS: dict[str, dict] = {
+    # GitHub Sponsors: pendiente de aprobación (20/10/2026); al aprobarse, poner
+    # "https://github.com/sponsors/Willyssj3" y sumar «github: [Willyssj3]» a .github/FUNDING.yml.
     "github": {"nombre": "GitHub Sponsors", "detalle": N_("desde cualquier país"), "url": ""},
-    "cafecito": {"nombre": "Cafecito", "detalle": N_("en pesos, con Mercado Pago"), "url": ""},
-    "paypal": {"nombre": "PayPal", "detalle": N_("con tarjeta o cuenta de PayPal"), "url": ""},
+    "cafecito": {"nombre": "Cafecito", "detalle": N_("en pesos, con Mercado Pago"), "url": "https://cafecito.app/willyssj3"},
+    "paypal": {"nombre": "PayPal", "detalle": N_("con tarjeta o cuenta de PayPal"), "url": "https://paypal.me/Willyssj3"},
 }
 
 ALLOWED = {

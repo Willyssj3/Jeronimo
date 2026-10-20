@@ -271,6 +271,16 @@ PyInstaller (`packaging/`) y se publica como `Jeronimo-Windows.zip`.
 
 </details>
 
+## Apoyar el proyecto
+
+Jerónimo es y va a seguir siendo gratis. Si te sirve y quieres colaborar con su desarrollo,
+puedes hacerlo, sin ningún compromiso:
+
+- [Cafecito](https://cafecito.app/willyssj3): en pesos, con Mercado Pago.
+- [PayPal](https://paypal.me/Willyssj3): con tarjeta o cuenta de PayPal, desde cualquier país.
+
+¡Gracias! Y si encuentras un error o tienes una idea, también es una gran ayuda.
+
 ## Licencia
 
 [MIT](LICENSE). La «J» del logo está trazada con la tipografía EB Garamond, que la
@@ -284,11 +294,13 @@ translator: it learns from other books by the same author and their official
 translations. Free and open source, for Windows. The app is also available in English:
 choose **English** in the language menu at the top right.
 [Download for Windows](https://github.com/Willyssj3/Jeronimo/releases/latest/download/Jeronimo-Windows.zip)
-(unzip it and open `Jeronimo.exe`).
+(unzip it and open `Jeronimo.exe`). It is and will stay free; if you'd like to support it:
+[PayPal](https://paypal.me/Willyssj3).
 
 **Português** · O Jerónimo traduz livros EPUB com IA imitando a voz do tradutor oficial:
 ele aprende com outros livros do mesmo autor e as traduções oficiais. Livre e gratuito,
 para Windows. O app também está em português: escolha **Português** no menu de idioma, no
 canto superior direito.
 [Baixar para Windows](https://github.com/Willyssj3/Jeronimo/releases/latest/download/Jeronimo-Windows.zip)
-(descompacte e abra `Jeronimo.exe`).
+(descompacte e abra `Jeronimo.exe`). É e vai continuar sendo gratuito; se quiser apoiar:
+[PayPal](https://paypal.me/Willyssj3).
